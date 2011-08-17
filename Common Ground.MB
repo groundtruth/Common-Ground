@@ -1,0 +1,2139 @@
+'=================================================================================
+define ApplicationName		"Common Ground"
+define BuildNum				"2010.07.20"
+define ApplicationDesc		"Property Data Maintenance System"
+define CopyrightNotice		"Copyright © 2005-2010 Groundtruth Mapping Systems"
+define ApplicationWebsite	"www.groundtruth.com.au"
+'=================================================================================
+
+include "Common Ground.DEF"
+
+declare sub MoveEditButtonHandler
+declare sub DeleteEditButtonHandler
+declare sub ArchiveSend
+declare sub ArchiveRestore
+
+
+'=================================================================================
+sub Main
+'=================================================================================
+'cls
+'set window Message position (0.2,1.2) units "in" width 4.0 units "in" height 4.0 units "in" font MakeFont("Verdana", 0, 8,0,16777215)
+
+M1TablePath = INIValue ( "EditFiles" , "TablePath" )
+
+LGACode = INIValue ( "Registration" , "LGACode" )
+VicmapDataSource = INIValue ( "MasterTables" , "SourceName" )
+
+'---- Preferences
+DefaultWorkspace = INIValue ( "Preferences" , "DefaultWorkspace" )
+CrefNoEditMode = ( INIValue ( "Preferences" , "CrefNoEditing" ) in ( "ON" , "TRUE" , "YES" ) )
+BasePropEditMode = ( INIValue ( "Preferences" , "BasePropertyEditing" ) in ( "ON" , "TRUE" , "YES" ) )
+ShowEditSummary = ( INIValue ( "Preferences" , "ShowEditSummary" ) in ( "ON" , "TRUE" , "YES" ) )
+EnforcePropNumCheck = ( INIValue ( "Preferences" , "EnforcePropNumCheck" ) in ( "ON" , "TRUE" , "YES" ) )
+EnforceCrefNoCheck = ( INIValue ( "Preferences" , "EnforceCrefNoCheck" ) in ( "ON" , "TRUE" , "YES" ) )
+RefreshLinkedTables = ( INIValue ( "Preferences" , "RefreshLinkedTables" ) in ( "ON" , "TRUE" , "YES" ) )
+
+'---- Reference (Rates) Data
+RatesDataSource = INIValue ( "ReferenceData" , "SourceName" )
+if RatesDataSource = "GEAC Pathway" then
+	RatesDataSource = "Pathway"
+end if
+if RatesDataSource = "Property.GOV" then
+	RatesDataSource = "Property.Gov"
+end if
+
+'---- Abbreviated Rates Source Name (to fit in match stats graph)
+do case RatesDataSource
+	case "Civica Authority" RatesDataSourceAbb = "Authority"
+	case "Fujitsu 2000Plus" RatesDataSourceAbb = "Fujitsu"
+	case "Infor Pathway" RatesDataSourceAbb = "Pathway"
+	case "Lynx Rating Manager" RatesDataSourceAbb = "Lynx"
+	case else RatesDataSourceAbb = RatesDataSource
+end case
+
+ODBCConnectionString = INIValue ( "ReferenceData" , "ODBCConnectionString" )
+RatesAddressView = INIValue ( "ReferenceData" , "AddressView" )
+RatesParcelView = INIValue ( "ReferenceData" , "ParcelView" )
+MIPRINXFieldType = INIValue ( "ReferenceData" , "MIPRINXFieldType" )
+RatesAddressLinkedTablePath = INIValue ( "ReferenceData" , "AddressLinkedTable" )
+RatesParcelLinkedTablePath = INIValue ( "ReferenceData" , "ParcelLinkedTable" )
+
+'---- Vicmap Data
+VicmapParcelTablePath = INIValue ( "MasterTables" , "Parcel" )
+VicmapPropertyTablePath = INIValue ( "MasterTables" , "Property" )
+VicmapParcelPropertyTablePath = INIValue ( "MasterTables" , "ParcelProperty" )
+VicmapAddressTablePath = INIValue ( "MasterTables" , "Address" )
+
+'---- Determine user's write permission on Vicmap data folder
+UserHasWritePermissionToDataFolder = DoesUserHaveWritePermissionOnFolder ( PathToDirectory$ ( VicmapAddressTablePath ) )
+
+
+'---- Address Dialog Control Settings
+call ReadAddressDialogSettingsFromINIFile
+
+if SystemInfo ( SYS_INFO_RUNTIME ) then
+	set window ( WIN_MAPINFO ) title "Common Ground"
+	call GenerateRuntimeMenu
+	create menu bar as
+		"&File",
+		"&Edit",
+		"&Tools",
+		"&Query",
+		"O&ptions",
+		"WinSpecific",
+		"&Window",
+		"&Help"
+	menu bar show
+    alter buttonpad id 4 show fixed toolbarposition (0,0)
+    alter buttonpad id 1 show fixed toolbarposition (0,1)
+
+end if
+
+create menu "&Data Audit" as
+	"Council Property > Unmatched Property" ID 1311 calling AuditQuery,
+	'"Council Parcel > Unmatched Parcel" ID 1312 calling AuditQuery,
+	"Council Property > Locality Discrepancy" ID 1313 calling AuditQuery,
+	"(-",
+	"Vicmap Address > Address Discrepancy" ID 1411 calling AuditQuery,
+	"(-",
+	"Vicmap Property > No PropNum" ID 1111 calling AuditQuery,
+	"Vicmap Property > No PropNum (Non-Crown)" ID 1112 calling AuditQuery,
+	"Vicmap Property > Invalid PropNum" ID 1115 calling AuditQuery,
+	"Vicmap Property > Potential Non-Contiguous" ID 1117 calling AuditQuery,
+	"(-",
+	"Vicmap Parcel > No CrefNo" ID 1211 calling AuditQuery
+	'"Vicmap Parcel > Invalid CrefNo"  ID 1512 calling AuditQuery
+
+create menu "&Search" as
+	"&Property...",
+	"&Parcel..."
+
+create menu "&View Layer" as
+	"&M1" ID 911 calling UserInitiatedViewLayer,
+	"(-",
+	"&Address" ID 912 calling UserInitiatedViewLayer,
+	"&Property" ID 913 calling UserInitiatedViewLayer,
+	"P&arcel" ID 914 calling UserInitiatedViewLayer,
+	"(-",
+	"Pr&oposed Parcel" ID 915 calling UserInitiatedViewLayer,
+	"Multi &Lot Parcel" ID 916 calling UserInitiatedViewLayer,
+	"M&ulti Assessment Property" ID 917 calling UserInitiatedViewLayer,
+	"(-",
+	"A&ll" ID 920 calling UserInitiatedViewLayer
+
+create menu "&Archive" as
+	"Send Submitted Edits to Archive..." calling ArchiveSend,
+	"Restore Edits from Archive" calling ArchiveRestore
+
+create menu "&Common Ground" as
+	"&View Layer" as "&View Layer",
+	"&Search..." calling SearchMap,
+	"(-",
+	"&Data Audit" as "&Data Audit",
+	"Show Match Statistics..." calling ShowMatchStatistics,
+	"Generate M1..." calling GenerateM1Dialog,
+	"Generate PIQA Export..." calling LaunchPIQAExport,
+'	"Verify Submitted Edits" calling EditVerification,
+	"&Archive" as "&Archive",
+	"Log on to Spatial Datamart" calling LaunchSpatialDatamartWebsite,
+	"(-",
+	"Help" calling Help,
+	"(-",
+	"&About Common Ground..." calling About,
+	"E&xit Common Ground" calling Exit
+
+if not FileExists ( ApplicationDirectory$() + "Common Ground.PDF" ) then
+	alter menu item "Help" disable
+end if
+
+alter menu bar remove ID 6, ID 7
+alter menu bar add "&Common Ground", ID 6, ID 7
+alter menu ID 4 add "&Common Ground" as "&Common Ground"
+
+'I'd like to disable the these menu items for non-CrefNo councils, but it results in an 'internal error'
+'if not CrefNoEditMode then
+'	alter menu item ID 1211 disable
+'	alter menu item ID 1512 disable
+'end if
+
+create ButtonPad "Common Ground" as
+	ToolButton
+		icon	101
+		file	"Common Ground.dll"
+		helpmsg "Edit Property/Parcel.\nEdit Property/Parcel"
+		cursor MI_CURSOR_FINGER_UP
+		drawmode  DM_CUSTOM_POINT
+		calling M1ButtonHandler
+	ToolButton
+		icon	185
+		helpmsg "Move Selected Edit.\nMove Selected Edit"
+		cursor MI_CURSOR_FINGER_UP
+		drawmode  DM_CUSTOM_POINT
+		calling MoveEditButtonHandler
+		disable
+	PushButton
+		icon	206
+		helpmsg "Delete Selected Edit.\nDelete Selected Edit"
+		calling DeleteEditButtonHandler
+		disable
+	ToolbarPosition ( 0 , 1 )
+	fixed
+
+if INIValue ( "Preferences" , "DockToolbar" ) in ( "OFF" , "FALSE" , "NO" ) then
+	alter ButtonPad "Common Ground" float
+else
+	if SystemInfo ( SYS_INFO_RUNTIME ) then
+		alter ButtonPad "Common Ground" ToolbarPosition ( 0 , 2 )
+	end if
+end if
+
+if EnforcePropNumCheck = TRUE and Server_NumDrivers() = 0 then
+	note "Your installation of MapInfo does not appear to have ODBC Support." + chr$(13) + chr$(13) +
+		"If you wish Common Ground to link to your rates system, please" + chr$(13) +
+		"run the MapInfo installer and select the 'Modify' option. Then" + chr$(13) +
+		"turn on the program feature 'MapInfo ODBC Support'."
+	EnforcePropNumCheck = FALSE
+end if
+
+if not FileExists ( M1TablePath ) then
+	if Ask ( "Do you wish to create a new M1 table?" , "Yes" , "No" ) then
+		call CreateM1Table ( M1TablePath )
+		if FileExists ( M1TablePath ) then
+			note "M1 table successfully created. File path is" + chr$(10) + M1TablePath
+		end if
+	end if
+end if
+
+if DefaultWorkspace <> "" then
+	if FileExists ( DefaultWorkspace ) then
+		run application DefaultWorkspace
+	end if
+end if
+
+call WinFocusChangedHandler
+
+if IsTableOpen ( "TempAddressLinkTable" ) then
+	drop table TempAddressLinkTable
+end if
+
+'---- disable menu items for which there are no functions yet
+'alter menu item ID 1512 disable
+'alter menu item ID 1411 disable
+'alter menu item ID 1312 disable
+
+end sub
+
+
+
+'================================================================================
+sub ArchiveSend
+'================================================================================
+
+dim ArchiveFolderPath as string
+dim ArchiveTablePath as string
+dim ArchiveTable as string
+dim ArchiveCutoffDateString as string
+dim ArchiveCutoffDate as date
+dim SomeInteger as integer
+
+ArchiveFolderPath = PathToDirectory$( M1TablePath ) + "Archive"
+ArchiveTablePath = ArchiveFolderPath + "\" + "M1 Archive.TAB"
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+dialog
+	title "Send Submitted Edits to Archive"
+	control StaticText
+		title "Edits recorded on or before: "
+	control EditText
+		value CurDate () - 28
+		into ArchiveCutoffDateString
+	control OKButton
+	control CancelButton
+
+if CommandInfo ( CMD_INFO_DLG_OK ) then
+
+	ArchiveCutoffDate = StringToDate ( ArchiveCutoffDateString )
+
+	select *
+		from M1Table
+		where M1Status = "Submitted" and
+			DateRecorded <= ArchiveCutoffDate
+		into EditsForArchive noselect
+
+	if TableInfo ( EditsForArchive , TAB_INFO_NROWS ) > 0 then
+
+		'---- create the archive folder if it doesn't exist
+		if not FileExists ( ArchiveFolderPath ) then
+			SomeInteger = CreateDirectory ( ArchiveFolderPath , 0 )
+		end if
+
+		if FileExists ( ArchiveTablePath ) then
+			open table ArchiveTablePath
+			ArchiveTable = TableInfo (0,1)
+			insert into ArchiveTable
+				select * from EditsForArchive
+			commit table ArchiveTable
+			close table ArchiveTable
+		else
+			commit table EditsForArchive as ArchiveTablePath
+		end if
+
+		delete from EditsForArchive
+		commit table M1Table
+		note "All submitted edits recorded on or before " + ArchiveCutoffDateString + " have been archived." + chr$(13) + chr$(13) + "You can restore them by selecting Common Ground > Archive > Restore Edits from Archive."
+
+	else
+		note "No submitted records exist on or before " + ArchiveCutoffDateString + "."
+	end if
+
+	close table EditsForArchive
+
+end if
+
+
+end sub
+
+
+
+'================================================================================
+sub ArchiveRestore
+'================================================================================
+
+dim ArchiveFolderPath as string
+dim ArchiveTablePath as string
+dim ArchiveTable as string
+
+ArchiveFolderPath = PathToDirectory$( M1TablePath ) + "Archive"
+ArchiveTablePath = ArchiveFolderPath + "\" + "M1 Archive.TAB"
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+if FileExists ( ArchiveTablePath ) then
+
+	open table ArchiveTablePath
+	ArchiveTable = TableInfo (0,1)
+
+	select *
+		from ArchiveTable
+		where M1Status = "Submitted"
+		into EditsToRestore noselect
+
+	if TableInfo ( EditsToRestore , TAB_INFO_NROWS ) > 0 then
+		insert into M1Table
+			select * from EditsToRestore
+		commit table M1Table
+		delete from EditsToRestore
+		commit table ArchiveTable
+		note "All archived edits marked as 'submitted' have been restored to the main M1 table."
+	else
+		note "No records marked as 'submitted' exist in archive table."
+	end if
+
+	close table ArchiveTable
+
+else
+
+	note "No archive currently exists."
+
+end if
+
+end sub
+
+
+
+'================================================================================
+sub MoveEditButtonHandler
+'================================================================================
+
+dim NewX as float
+dim NewY as float
+
+dim TempPointTable as string
+dim TempPointObjectAlias as alias
+dim TempPointPFIAlias as alias
+dim VicmapPropertyObjectAlias as alias
+dim VicmapPropertyPFIAlias as alias
+
+set coordsys window FrontWindow()
+ActiveCoordSys = MapperInfo ( FrontWindow() , MAPPER_INFO_COORDSYS_NAME )
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+NewX = CommandInfo ( CMD_INFO_X )
+NewY = CommandInfo ( CMD_INFO_Y )
+
+fetch first from Selection
+
+update Selection set obj = CreatePoint ( NewX , NewY )
+
+if Selection.dist_related_flag = "Y" then
+
+	update Selection set easting = round ( NewX , 1 )
+	update Selection set northing = round ( NewY , 1 )
+	update Selection set datum_proj = ucase$ ( ActiveCoordSys )
+
+	TempPointTable = TempFileName$( "" )
+	commit table Selection as TempPointTable
+	open table TempPointTable
+	TempPointTable = TableInfo ( 0 , 1 )
+	TempPointObjectAlias = TempPointTable + ".obj"
+	TempPointPFIAlias = TempPointTable + ".property_pfi"
+	VicmapPropertyObjectAlias = VicmapPropertyTable + ".obj"
+	VicmapPropertyPFIAlias = VicmapPropertyTable + ".PROP_PFI"
+	select *
+		from TempPointTable, VicmapPropertyTable
+		where TempPointObjectAlias within VicmapPropertyObjectAlias and
+			TempPointPFIAlias = VicmapPropertyPFIAlias
+		into TempResultsTable noselect
+	if TableInfo ( TempResultsTable , TAB_INFO_NROWS ) = 0 then
+		update Selection set outside_property = "Y"
+		update Selection set parcel_pfi = ""
+	else
+		update Selection set outside_property = "N"
+	end if
+	drop table TempPointTable
+
+end if
+
+commit table M1Table
+
+end sub
+
+
+
+'================================================================================
+sub DeleteEditButtonHandler
+'================================================================================
+
+dim SelectedPropPFI as string
+dim SelectedRecordEditDate as date
+dim SelectedRecordEditTime as string
+
+SelectedPropPFI = Selection.property_pfi
+SelectedRecordEditDate = Selection.DateRecorded
+SelectedRecordEditTime = Selection.TimeRecorded
+
+if Ask ( "Do you wish to delete the selected Edit?" , "Yes" , "No" ) then
+	'---- delete the user-selected record as well as any 'Z' edits that were recorded at the same time
+	select *
+		from M1Table
+		where
+			property_pfi = SelectedPropPFI and
+			DateRecorded = SelectedRecordEditDate and
+			TimeRecorded = SelectedRecordEditTime
+		into M1RecordsToDelete noselect
+	delete from M1RecordsToDelete
+	close table M1RecordsToDelete
+	commit table M1Table
+	pack table M1Table graphic data
+	if IsThisWindowOpen ( CurrentMapWindow ) then
+		call AddLayerToMap ( M1Table , LAYERSHOW )
+	end if
+end if
+
+end sub
+
+
+
+'================================================================================
+sub OpenTables
+'================================================================================
+
+dim CurrentTablePath as string
+dim VicmapPropertySimplifiedDate as date
+dim VicmapAddressDate as date
+
+dim VicmapPropertySimplifiedFolder as string
+dim VicmapAddressSourceTABFile as string
+dim VicmapAddressDestinationTABFile as string
+
+
+if not FileExists ( M1TablePath ) then note "M1 table path specified in INI file does not exist." call Exit end if
+if not FileExists ( VicmapParcelTablePath ) then note "Vicmap Parcel table path specified in INI file does not exist." call Exit end if
+if not FileExists ( VicmapPropertyTablePath ) then note "Vicmap Property table path specified in INI file does not exist." call Exit end if
+if not FileExists ( VicmapParcelPropertyTablePath ) then note "Vicmap Parcel-Property table path specified in INI file does not exist." call Exit end if
+'---- this command moved below to cater for sites that use a 'formatted' folder
+'if not FileExists ( VicmapAddressTablePath ) then note "Vicmap Address table path specified in INI file does not exist." call Exit end if
+
+if not TablesOpened then
+
+	'---- for councils who have a separate folder for 'formatted' Vicmap Address, ensure that it is updated from the source folder
+	'---- eg, South Gippsland, Yarra Ranges
+	VicmapAddressDestinationTABFile = VicmapAddressTablePath
+	if VicmapAddressDestinationTABFile like "%Formatted%" then
+		VicmapAddressSourceTABFile = FindAndReplaceText ( VicmapAddressDestinationTABFile , "\formatted\ADDRESS.TAB" , "\ADDRESS.TAB" )
+		if not FileExists ( VicmapAddressSourceTABFile ) then
+			note "Table '" + VicmapAddressSourceTABFile + "' does not exist."
+			call Exit
+		end if
+		if FileModifiedDate ( VicmapAddressDestinationTABFile ) < FileModifiedDate ( VicmapAddressSourceTABFile ) or not FileExists ( VicmapAddressDestinationTABFile ) then
+			if UserHasWritePermissionToDataFolder then
+				if IsTableOpen ( VicmapAddressTablePath ) then
+					'---- get alias of the address table, then close it
+					open table VicmapAddressTablePath
+					VicmapAddressTable = TableInfo ( 0 , 1 )
+					close table VicmapAddressTable interactive
+				end if
+				'---- added this on 10-09-2008 to avoid crashing on new data update at Loddon
+				if IsTableOpen ( VicmapAddressSourceTABFile ) then
+					'---- get alias of the address table, then close it
+					open table VicmapAddressSourceTABFile
+					close table TableInfo ( 0 , 1 ) interactive
+					note "Common Ground needs to close the Address table." + chr$(10) + "After the update process is complete, you may choose" + chr$(13) + "to continue without it in your map window, or you" + chr$(10) + "can restart MapInfo to return it to the map window."
+				end if
+				'----
+				save file left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".DAT" as left$ ( VicmapAddressDestinationTABFile , len ( VicmapAddressDestinationTABFile ) - 4 ) + ".DAT"
+				save file left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".ID" as left$ ( VicmapAddressDestinationTABFile , len ( VicmapAddressDestinationTABFile ) - 4 ) + ".ID"
+				if FileExists ( left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".IND" ) then
+					save file left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".IND" as left$ ( VicmapAddressDestinationTABFile , len ( VicmapAddressDestinationTABFile ) - 4 ) + ".IND"
+				end if
+				save file left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".MAP" as left$ ( VicmapAddressDestinationTABFile , len ( VicmapAddressDestinationTABFile ) - 4 ) + ".MAP"
+				save file left$ ( VicmapAddressSourceTABFile , len ( VicmapAddressSourceTABFile ) - 4 ) + ".TAB" as left$ ( VicmapAddressDestinationTABFile , len ( VicmapAddressDestinationTABFile ) - 4 ) + ".TAB"
+				if FileExists ( PathToDirectory$ ( VicmapAddressSourceTABFile ) + "VICMAP_ADDRESS.xml" ) then
+					save file PathToDirectory$ ( VicmapAddressSourceTABFile ) + "VICMAP_ADDRESS.xml" as PathToDirectory$ ( VicmapAddressDestinationTABFile ) + "VICMAP_ADDRESS.xml"
+				end if
+			else
+				note "You don't have the right privileges to update the Address information."
+				call Exit
+			end if
+		end if
+	end if
+
+	VicmapPropertySimplifiedDate = DatasetSupplyDate ( PathToDirectory$ ( INIValue ( "MasterTables" , "Property" ) ) + "VMPROP_SIMPLIFIED_1.xml" )
+	VicmapAddressDate = DatasetSupplyDate ( PathToDirectory$ ( INIValue ( "MasterTables" , "Address" ) ) + "VICMAP_ADDRESS.xml" )
+
+	if ( not ( VicmapPropertySimplifiedDate = "" ) and CurDate() - VicmapPropertySimplifiedDate > 14 ) or
+		( not ( VicmapAddressDate = "" ) and CurDate() - VicmapAddressDate > 14 ) then
+		note "Your copy of Vicmap Property Simplified and/or" + chr$(13) +
+			"Vicmap Address is more than two weeks old." + chr$(13) +
+			chr$(13) +
+			"Vicmap Property Simplified published date: " + str$(VicmapPropertySimplifiedDate) + chr$(13) +
+			"Vicmap Address published date: " + str$(VicmapAddressDate) + chr$(13) +
+			chr$(13) +
+			"Common Ground recommends that you download a new" + chr$(13) +
+			"copy of Vicmap Property Simplified and Vicmap Address."
+	end if
+
+	' this restores the Common Ground menu to the menu bar for when another program
+	' like EasiMaps has removed it
+	alter menu bar remove ID 6, ID 7
+	alter menu bar add "&Common Ground", ID 6, ID 7
+
+end if
+
+open table M1TablePath
+M1Table = TableInfo ( 0 ,1 )
+'ensure table is open for write access
+CurrentTablePath = TableInfo ( M1Table , TAB_INFO_TABFILE )
+if TableInfo ( M1Table , TAB_INFO_READONLY ) then
+	close table TableInfo ( M1Table ,1 )
+	open table CurrentTablePath as M1Table
+end if
+
+open table VicmapAddressTablePath
+VicmapAddressTable = TableInfo ( 0 , 1 )
+
+open table VicmapParcelTablePath
+VicmapParcelTable = TableInfo ( 0 , 1 )
+
+open table VicmapPropertyTablePath
+VicmapPropertyTable = TableInfo ( 0 , 1 )
+
+open table VicmapParcelPropertyTablePath
+VicmapParcelPropertyTable = TableInfo ( 0 , 1 )
+
+
+if UserHasWritePermissionToDataFolder then
+
+	'Change Vicmap Address integer fields back to character fields
+	if ColumnInfo ( VicmapAddressTable , "HOUSE_NUMBER_1" , COL_INFO_TYPE ) <> COL_TYPE_CHAR then
+	
+		'ensure table is open for write access
+		if TableInfo ( VicmapAddressTable , TAB_INFO_READONLY ) then
+			CurrentTablePath = TableInfo ( VicmapAddressTable , TAB_INFO_TABFILE )
+			close table VicmapAddressTable
+			open table CurrentTablePath as VicmapAddressTable
+		end if
+		
+		alter table VicmapAddressTable (
+			modify
+				BLG_UNIT_ID_1 Char(10),
+				BLG_UNIT_ID_2 Char(10),
+				FLOOR_NO_1 Char(10),
+				FLOOR_NO_2 Char(10),
+				HOUSE_NUMBER_1 Char(10),
+				HOUSE_NUMBER_2 Char(10),
+				DISP_NUMBER_1 Char(10),
+				DISP_NUMBER_2 Char(10) ) Interactive
+	
+		set table VicmapAddressTable fastedit on undo off
+	
+		Select BLG_UNIT_ID_1 from VicmapAddressTable where BLG_UNIT_ID_1 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set BLG_UNIT_ID_1 = ""
+	
+		Select BLG_UNIT_ID_2 from VicmapAddressTable where BLG_UNIT_ID_2 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set BLG_UNIT_ID_2 = ""
+	
+		Select FLOOR_NO_1 from VicmapAddressTable where FLOOR_NO_1 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set FLOOR_NO_1 = ""
+	
+		Select FLOOR_NO_2 from VicmapAddressTable where FLOOR_NO_2 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set FLOOR_NO_2 = ""
+	
+		Select HOUSE_NUMBER_1 from VicmapAddressTable where HOUSE_NUMBER_1 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set HOUSE_NUMBER_1 = ""
+	
+		Select HOUSE_NUMBER_2 from VicmapAddressTable where HOUSE_NUMBER_2 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set HOUSE_NUMBER_2 = ""
+	
+		Select DISP_NUMBER_1 from VicmapAddressTable where DISP_NUMBER_1 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set DISP_NUMBER_1 = ""
+	
+		Select DISP_NUMBER_2 from VicmapAddressTable where DISP_NUMBER_2 = "0" into AddressZeroValue noselect
+		Update AddressZeroValue Set DISP_NUMBER_2 = ""
+	
+		Commit Table VicmapAddressTable Interactive
+		close table AddressZeroValue interactive
+	
+	end if
+	
+	call EnsureFieldIsIndexed ( VicmapAddressTable , "PROPERTY_PFI" )
+	call EnsureFieldIsIndexed ( VicmapAddressTable , "IS_PRIMARY" )
+	call EnsureFieldIsIndexed ( VicmapAddressTable , "LGA_CODE" )
+	call EnsureFieldIsIndexed ( VicmapAddressTable , "DISTANCE_RELATED_FLAG" ) '---- Common Ground doesn't require DISTANCE_RELATED_FLAG to be indexed yet, but I may introduce a thematic layer for representing address types
+
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_PFI" )
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_SPI" ) '---- Common Ground doesn't require SPI or PARCEL_PLAN_NUMBER to be indexed but it will help councils who need to search using MapInfo/EasiMaps
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_PLAN_NUMBER" )
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_DESC_TYPE" )
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_LGA_CODE" )
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_STATUS" )
+	call EnsureFieldIsIndexed ( VicmapParcelTable , "PARCEL_CROWN_STATUS" )
+	
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_PFI" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_LGA_CODE" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_PROPNUM" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_PROPERTY_TYPE" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_MULTI_ASSESSMENT" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_STATUS" )
+	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROPV_FEATURE_TYPE" )
+	
+	call EnsureFieldIsIndexed ( VicmapParcelPropertyTable , "PARCEL_PFI" )
+	call EnsureFieldIsIndexed ( VicmapParcelPropertyTable , "PROPERTY_PFI" )
+
+end if
+
+TablesOpened = TRUE
+
+end sub
+
+
+
+'================================================================================
+sub SelChangedHandler
+'================================================================================
+
+if not IsMapWindowOpen() then exit sub end if
+
+if SelectionInfo ( SEL_INFO_NROWS ) <> 1 then
+	alter button MoveEditButtonHandler disable
+	alter button DeleteEditButtonHandler disable
+	exit sub
+end if
+
+if FrontWindow() <> 0 then
+	if WindowInfo ( FrontWindow() , WIN_INFO_TYPE ) = WIN_BROWSER and
+	   SelectionInfo ( SEL_INFO_TABLENAME ) in ( VicmapPropertyTable , VicmapParcelTable , VicmapAddressTable , M1Table , "Address_Discrepancy" , "Council_IncorrectLocality" , "CommonGroundSearchQuery" ) then
+		call ZoomToSelection ( CurrentMapWindow , 4 )
+	end if
+end if
+
+if SelectionInfo ( SEL_INFO_TABLENAME ) = M1Table then
+	alter button MoveEditButtonHandler enable
+	alter button DeleteEditButtonHandler enable
+	if ShowEditSummary then
+		call DisplayRecordSummary ( Selection , 1 )
+	end if
+end if
+
+if WindowInfo ( FrontWindow() , WIN_INFO_NAME ) = "Property_NonContiguous Browser" then
+	call CloseNamedWindow ( "Potential Non-Contiguous Property" )
+	map from Selection
+	set map redraw off
+	add map layer Selection
+	if not TablesOpened then call OpenTables end if
+	Add Map Layer VicmapParcelTable Set Map Order 2,3,1 
+	Set Map Layer 1 Display Global Global Pen (7,2,16711680) Global Brush (1,16777215,16777215) 
+	Set Map Layer 2 Display Global Global Pen (130,2,16777168) Global Brush (2,16777168,16777215) 
+	Set Map Layer 3 Display Global Global Pen (1,2,12632256) Global Brush (1,16777215,16777215) 
+	set map redraw on
+	set window FrontWindow() title "Potential Non-Contiguous Property"
+	
+end if
+
+
+end sub
+
+
+
+'================================================================================
+sub WinFocusChangedHandler
+'================================================================================
+
+dim i as smallint
+dim TempFile as string
+
+'**** It's been reported by Frankston that MapInfo version 6.5 crashes
+
+'**** If MapInfo version is 6.5 or earlier, write an error log that documents every step in WinFocusChangedHandler.
+'**** This may solve the crashing problem by slowing MapInfo down, or it may help identify the exact point of failure
+
+if SystemInfo ( SYS_INFO_MIVERSION ) > 700 then
+
+	CurrentMapWindow = -9999
+	
+	if NumWindows() > 0 then
+		if FrontWindow() = 0 then
+			exit sub
+		end if
+		if WindowInfo( FrontWindow() , WIN_INFO_TYPE ) = WIN_MAPPER then
+			if not WindowInfo ( FrontWindow() , WIN_INFO_NAME ) = "Potential Non-Contiguous Property" then
+				CurrentMapWindow = FrontWindow()
+			end if
+		else
+			if not IsThisWindowOpen ( CurrentMapWindow ) then
+				CurrentMapWindow = -9999
+				for i = 1 to NumWindows()
+					if WindowInfo ( i , WIN_INFO_TYPE ) = WIN_MAPPER then
+						if not WindowInfo ( i , WIN_INFO_NAME ) = "Potential Non-Contiguous Property" then
+							CurrentMapWindow = WindowInfo ( i , WIN_INFO_WINDOWID )
+						end if
+					end if
+				next
+			end if
+		end if
+	end if
+
+else
+
+	TempFile = TempFileName$( "" )
+	open file TempFile for append as #102
+
+	print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "Calling WinFocusChangedHandler..."
+
+	CurrentMapWindow = -9999
+
+	print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  querying number of windows..."
+	if NumWindows() > 0 then
+		if FrontWindow() = 0 then
+			print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  exiting sub..."
+			exit sub
+		end if
+		print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  querying window type..."
+		if WindowInfo(FrontWindow(),WIN_INFO_TYPE) = WIN_MAPPER then
+			print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  getting front window ID..."
+			CurrentMapWindow = FrontWindow()
+		else
+			print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  calling IsThisWindowOpen..."
+			if not IsThisWindowOpen ( CurrentMapWindow ) then
+				CurrentMapWindow = -9999
+				print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  looping..."
+				for i = 1 to NumWindows()
+					if WindowInfo ( i , WIN_INFO_TYPE ) = WIN_MAPPER then
+						print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "  updating window ID..."
+						CurrentMapWindow = WindowInfo ( i , WIN_INFO_WINDOWID )
+					end if
+				next
+			end if
+		end if
+	end if
+
+	print #102 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + "WinFocusChangedHandler completed successfully"
+	close file #102
+
+	kill TempFile
+
+end if
+
+end sub
+
+
+
+'================================================================================
+sub UserInitiatedViewLayer
+'================================================================================
+
+dim BottomLayerNum as integer
+
+call OpenTables
+
+do case CommandInfo ( CMD_INFO_MENUITEM )
+
+	case 911	call AddLayerToMap ( M1Table , LAYERSHOW )
+	case 912	call AddLayerToMap ( VicmapAddressTable , LAYERSHOW )
+	case 913	call AddLayerToMap ( VicmapPropertyTable , LAYERSHOW )
+	case 914	call AddLayerToMap ( VicmapParcelTable , LAYERSHOW )
+
+	case 915	select * from VicmapParcelTable where PARCEL_STATUS = "P" into VicmapParcelTable + "_proposed" noselect
+				call AddLayerToMap ( VicmapParcelTable + "_proposed" , LAYERSHOW )
+
+	case 916	select * from VicmapParcelTable where PARCEL_DESC_TYPE = "12" into VicmapParcelTable + "_multi_lot" noselect
+				if TableInfo ( VicmapParcelTable + "_multi_lot" , TAB_INFO_NROWS ) > 0 then
+					call AddLayerToMap ( VicmapParcelTable + "_multi_lot" , LAYERSHOW )
+				end if
+
+	case 917	select * from VicmapPropertyTable where PROP_MULTI_ASSESSMENT = "Y" into VicmapPropertyTable + "_multi_ass" noselect
+				if TableInfo ( VicmapPropertyTable + "_multi_ass" , TAB_INFO_NROWS ) > 0 then
+					call AddLayerToMap ( VicmapPropertyTable + "_multi_ass" , LAYERSHOW )
+				end if
+
+	case 920
+				select * from VicmapPropertyTable where PROP_MULTI_ASSESSMENT = "Y" into VicmapPropertyTable + "_multi_ass" noselect
+				select * from VicmapParcelTable where PARCEL_DESC_TYPE = "12" into VicmapParcelTable + "_multi_lot" noselect
+				select * from VicmapParcelTable where PARCEL_STATUS = "P" into VicmapParcelTable + "_proposed" noselect
+				call AddLayerToMap ( VicmapParcelTable , LAYERSHOW )
+				set map redraw off
+				call AddLayerToMap ( VicmapPropertyTable + "_multi_ass" , LAYERSHOW )
+				call AddLayerToMap ( VicmapParcelTable + "_multi_lot" , LAYERSHOW )
+				call AddLayerToMap ( VicmapPropertyTable , LAYERSHOW )
+				call AddLayerToMap ( VicmapParcelTable + "_proposed" , LAYERSHOW )
+				call AddLayerToMap ( VicmapAddressTable , LAYERSHOW )
+				call AddLayerToMap ( M1Table , LAYERSHOW )
+				set map redraw on
+
+end case
+
+'---- if Parcel is the bottom layer, colour it in
+BottomLayerNum = MapperInfo ( CurrentMapWindow , MAPPER_INFO_LAYERS )
+if LayerInfo ( CurrentMapWindow , BottomLayerNum , LAYER_INFO_NAME ) = VicmapParcelTable then
+	set map layer BottomLayerNum Global Pen (1,2,12632256) Brush (2,16777168,16777215)
+end if
+
+end sub
+
+
+
+'================================================================================
+sub M1ButtonHandler
+'================================================================================
+
+dim TempPointTablePath as string
+dim M1NewRowID as integer
+dim ParcelPFIValue as string
+dim PropertyPFIValue as string
+dim CurrentEditCode as string
+
+redim VicmapPropertyDetails ( 0 )
+redim VicmapParcelDetails ( 0 )
+redim VicmapAddressDetails ( 0 )
+
+redim RatesAddressDetails ( 0 )
+redim ActionVicmapAddressDetails ( 0 )
+redim AddressDialogValues ( 0 )
+
+UserInteractedWithAddress = FALSE
+
+call OpenTables
+
+set ProgressBars off
+
+if IsTableOpen ( "TempPoint" ) then
+	drop table TempPoint
+end if
+
+if IsTableOpen ( "TempAddressLinkTable" ) then
+	drop table TempAddressLinkTable
+end if
+
+if WindowInfo ( FrontWindow() , WIN_INFO_TYPE ) <> WIN_MAPPER then
+	note "The map window has unexpectedly closed." + chr$(10) + "Please open another map window or restart MapInfo to resume editing."
+	exit sub
+end if
+	
+set coordsys window FrontWindow()
+ActiveCoordSys = MapperInfo ( FrontWindow() , MAPPER_INFO_COORDSYS_NAME )
+M1X = CommandInfo ( CMD_INFO_X )
+M1Y = CommandInfo ( CMD_INFO_Y )
+
+TempPointTablePath = TempFileName$( "" )
+create table TempPoint (Field1 Char(10)) file TempPointTablePath
+create map for TempPoint
+
+set style symbol MakeFontSymbol (35,8421504,12,"MapInfo Symbols",16,0)
+insert into TempPoint  ( obj )
+	values ( CreatePoint ( M1X , M1Y ) )
+
+commit table TempPoint
+
+set map redraw off
+add map layer TempPoint
+set map redraw on
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+if not DoesMapContainLayer ( FrontWindow() , M1Table ) then
+	call AddLayerToMap ( M1TablePath , LAYERSHOW )
+end if
+
+if not DoesMapContainLayer ( FrontWindow() , VicmapParcelTable ) then
+	call AddLayerToMap ( VicmapParcelTablePath , LAYERHIDE )
+end if
+
+if not DoesMapContainLayer ( FrontWindow() , VicmapPropertyTable ) then
+	call AddLayerToMap ( VicmapPropertyTablePath , LAYERHIDE )
+end if
+
+call PopulateVicmapParcelDetails
+
+if ubound ( VicmapParcelDetails ) = 0 then
+	note "No parcels detected." + chr$(10) + "Cancelling M1 Edit."
+	drop table TempPoint
+	exit sub
+end if
+
+set ProgressBars on
+
+call PropertyDialog
+if not CommandInfo(CMD_INFO_DLG_OK) or ubound ( VicmapPropertyDetails ) = 0 then
+	drop table TempPoint
+	close table Selection interactive
+	exit sub
+end if
+
+if IsTableOpen ( "TempAddressLinkTable" ) then
+	drop table TempAddressLinkTable
+end if
+
+set event processing off
+
+close table Selection interactive
+
+set map redraw off
+remove map layer TempPoint
+set map redraw on
+
+drop table TempPoint
+
+set style symbol MakeFontSymbol (35,16711680,12,"MapInfo Symbols",16,0)
+
+onerror goto Err
+
+insert into M1Table ( obj )
+	values ( CreatePoint ( M1X , M1Y ) )
+
+M1NewRowID = TableInfo ( M1Table , TAB_INFO_NROWS )
+select * from M1Table where rowid = M1NewRowID into M1CurrentRecord noselect
+
+'---- EDIT_CODE
+CurrentEditCode = 	AutoEditCode (
+	VicmapPropertyDetails ( TargetPropertyPicklistValue ) . MULTI_ASSESS,
+	VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY,
+	VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG,
+	TargetExtentPicklistValue,
+	ActionPropNumPicklistValue,
+	ActionAddressPicklistValue,
+	ActionCrefNoPicklistValue )
+update M1CurrentRecord set EDIT_CODE = CurrentEditCode
+
+'---- PROPERTY_PFI
+if CurrentEditCode in ( "E" , "P" , "S" , "T" , "Z" ) or
+		CurrentEditCode in ( "A" , "R" ) and TargetExtentPicklistValue <> EXTENT_THIS_PARCEL then
+	update M1CurrentRecord set PROPERTY_PFI = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI
+end if
+
+'---- PARCEL_PFI
+'---- 2007-01-22 - removed E and P edits from getting a Parcel_PFI unless there is only one parcel or there is a CrefNo
+'if CurrentEditCode in ( "E" , "P" , "T" ) or
+
+'**** Modified 2009-04-09 - Yarra Ranges pointed out that Parcel_PFI for 'add multi' should not be populated
+if CurrentEditCode <> "A" then
+	if CurrentEditCode = "T" or
+			UserInputCREFNO <> "" or
+			ActionCrefNoPicklistValue in ( CREFNO_MODIFY , CREFNO_REMOVE ) or
+			( ActionPropNumPicklistValue in ( PROPNUM_ADD , PROPNUM_REMOVE ) and TargetExtentPicklistValue = EXTENT_THIS_PARCEL ) or
+			VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels = 1 then
+		update M1CurrentRecord set PARCEL_PFI = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI
+	end if
+end if
+
+'---- RETIRED_PROPNUM
+if CurrentEditCode = "R" or ( UserInputPropertyNumber <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM and CurrentEditCode <> "A" ) then
+	update M1CurrentRecord set RETIRED_PROPNUM = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM
+end if
+
+'---- PROPNUM
+update M1CurrentRecord set PROPNUM = UserInputPropertyNumber
+
+'---- CREFNO
+'if CurrentEditCode <> "S" then
+'**** Modified 2009-04-09 - Yarra Ranges pointed out that CrefNo for 'add multi' should not be populated
+if CurrentEditCode not in ( "S" , "A" ) then
+	update M1CurrentRecord set CREFNO = UserInputCREFNO
+end if
+
+'---- Parcel Details
+if CurrentEditCode not in ( "S" , "Z" ) then
+	if TargetExtentPicklistValue = EXTENT_THIS_PARCEL or ubound ( ExtentPicklistArray ) = 1 then
+		update M1CurrentRecord set SPI = VicmapParcelDetails ( TargetParcelPicklistValue ) . SPI
+		update M1CurrentRecord set PART_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . PART
+		update M1CurrentRecord set PLAN_NUMBER = VicmapParcelDetails ( TargetParcelPicklistValue ) . PLAN_NUMBER
+		update M1CurrentRecord set LOT_NUMBER = VicmapParcelDetails ( TargetParcelPicklistValue ) . LOT_NUMBER
+		update M1CurrentRecord set ALLOTMENT = VicmapParcelDetails ( TargetParcelPicklistValue ) . ALLOTMENT
+		update M1CurrentRecord set SECTION_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . SECTION
+		update M1CurrentRecord set BLOCK_C = VicmapParcelDetails ( TargetParcelPicklistValue ) . BLOCK
+		update M1CurrentRecord set PORTION = VicmapParcelDetails ( TargetParcelPicklistValue ) . PORTION
+		update M1CurrentRecord set SUBDIVISION = VicmapParcelDetails ( TargetParcelPicklistValue ) . SUBDIVISION
+		update M1CurrentRecord set PARISH_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARISH_CODE
+		update M1CurrentRecord set TOWNSHIP_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . TOWNSHIP_CODE
+	end if
+end if
+
+'call PopulateRatesAddressDetails ( UserInputPropertyNumber )
+
+'---- Address Details
+'---- old code; replaced on 15-01-2007
+'if CurrentEditCode in ( "E" , "S" , "A" ) or ( CurrentEditCode = "T" and ActionAddressPicklistValue = ADDRESS_MODIFY ) then
+'	if UserInteractedWithAddress then
+'		call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , AddressDialogValues ( 1 ) )
+'	else
+'		if ubound ( RatesAddressDetails ) > 0 then
+'			call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , RatesAddressDetails ( 1 ) )
+'		end if
+'	end if
+'end if
+'
+'if CurrentEditCode = "Z" then
+'	call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , VicmapAddressDetails ( TargetAddressPicklistValue ) )
+'end if
+
+'---- Address Details
+if CurrentEditCode = "Z" then
+	call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , VicmapAddressDetails ( TargetAddressPicklistValue ) )
+else
+	if ActionAddressPicklistValue <> ADDRESS_REMOVE then
+		if CurrentEditCode in ( "E" , "S" , "A" ) or ( CurrentEditCode = "T" and ActionAddressPicklistValue = ADDRESS_MODIFY ) then
+			if UserInteractedWithAddress then
+				call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , AddressDialogValues ( 1 ) )
+			else
+				if ubound ( RatesAddressDetails ) > 0 then
+					call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , RatesAddressDetails ( 1 ) )
+				end if
+			end if
+		end if
+	end if
+end if
+
+
+'---- Address Primary/Secondary Details
+
+
+'---- Address Distance-Related Details
+'if AddressDialogDistRelTickbox then
+'	update M1CurrentRecord set dist_related_flag = "Y"
+'	update M1CurrentRecord set outside_property = "N"
+'	do case AddressDialogPositionValue
+'		case 0,1
+'		case 2
+'	end case
+'end if
+
+if ActionAddressPicklistValue = ADDRESS_ADD  and ubound ( AddressDialogValues ) = 1 then
+	update M1CurrentRecord set easting = AddressDialogValues ( 1 ) . EASTING
+	update M1CurrentRecord set northing = AddressDialogValues ( 1 ) . NORTHING
+	update M1CurrentRecord set datum_proj = ucase$ ( AddressDialogValues ( 1 ) . DATUM_PROJ )
+end if
+
+'---- M1 'Admin' Details
+update M1CurrentRecord set M1Status = "Recorded"
+if FieldExists ( M1CurrentRecord , "DateRecorded" ) then
+	update M1CurrentRecord set DateRecorded = CurDate()
+end if
+if FieldExists ( M1CurrentRecord , "TimeRecorded" ) then
+	update M1CurrentRecord set TimeRecorded = str$(Time(24))
+end if
+if FieldExists ( M1CurrentRecord , "RecordedBy" ) then
+	update M1CurrentRecord set RecordedBy = WindowsUserName()
+end if
+
+'---- display info results of updated M1 fields
+if ShowEditSummary then
+	call DisplayRecordSummary ( M1Table , TableInfo ( M1Table , TAB_INFO_NROWS ) )
+end if
+
+if IsAdditionalZapRecordRequired (
+	CurrentEditCode,
+	VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI,
+	VicmapAddressDetails ( TargetAddressPicklistValue ) . PFI,
+	VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY,
+	VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG,
+	ActionAddressPicklistValue ) then
+
+'if ActionAddressPicklistValue = ADDRESS_MODIFY and
+'	( VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY = "N" or
+'		VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG = "Y" ) then
+
+		insert into M1Table (
+				PROPERTY_PFI ,
+				PROPNUM ,
+				SU_PREFIX_1,
+				SU_NO_1,
+				SU_SUFF_1,
+				SU_PREFIX_2,
+				SU_NO_2,
+				SU_SUFF_2,
+				HOUSE_PREFIX_1,
+				HOUSE_NUMBER_1,
+				HOUSE_SUFFIX_1,
+				HOUSE_PREFIX_2,
+				HOUSE_NUMBER_2,
+				HOUSE_SUFFIX_2,
+				STREET_NAME,
+				STREET_TYPE,
+				STREET_SUFFIX,
+				LOCALITY,
+				POSTCODE,
+				DIST_RELATED_FLAG ,
+				PRIMARY ,
+				EDIT_CODE ,
+				DateRecorded ,
+				TimeRecorded ,
+				RecordedBy ,
+				M1Status )
+			values (
+				VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI,
+				'UserInputPropertyNumber ,
+				VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM ,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_PREFIX_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_NO_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_SUFF_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_PREFIX_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_NO_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_SUFF_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_PREFIX_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_NUMBER_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_SUFFIX_1,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_PREFIX_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_NUMBER_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_SUFFIX_2,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_NAME,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_TYPE,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_SUFFIX,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . LOCALITY,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . POSTCODE,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG,
+				VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY,
+				"Z" ,
+				CurDate() ,
+				str$(Time(24)) ,
+				WindowsUserName() ,
+				"Recorded" )
+end if
+
+commit table M1Table interactive
+close table M1CurrentRecord interactive
+close table RatesAddressQuery interactive
+if IsTableOpen ( "TempAddressLinkTable" ) then
+	drop table TempAddressLinkTable
+end if
+
+set event processing on
+set map redraw on
+
+'force redraw of map window to counteract the dots disappearing from the map
+update window CurrentMapWindow
+set map window CurrentMapWindow
+	center ( MapperInfo ( CurrentMapWindow , MAPPER_INFO_CENTERX ) , MapperInfo ( CurrentMapWindow , MAPPER_INFO_CENTERY ) )
+
+exit sub
+
+Err:
+	close table M1Table
+	note "The M1 table may be currently locked by another user" + chr$(13) + "with unsaved changes." + chr$(13) + chr$(13) + "Please ensure all users save their changes, and try again."
+	close table TempAddressLinkTable interactive
+	open table M1TablePath
+	'---- add the most recently opened table (ie, M1) to the map as a layer
+	set map redraw off
+	add map layer TableInfo ( 0 , 1 )
+	set map redraw on
+
+end sub
+
+
+
+''================================================================================
+'sub GenerateM1
+''================================================================================
+'
+'dim M1SpreadsheetFolder as string
+'dim M1FilePrefix as string
+'dim M1SpreadsheetName as string
+'dim M1SpreadsheetPath as string
+'
+'' populate M1Table variable for if 'OpenTables' sub has not yet been run
+'open table M1TablePath
+'M1Table = TableInfo ( 0 , 1 )
+'
+'if TableInfo ( M1Table , TAB_INFO_EDITED ) then
+'	if Ask ( "Save changes to M1 table?" , "Save" , "Cancel" ) then
+'		commit table M1Table
+'	else
+'		exit sub
+'	end if
+'end if
+'
+'M1SpreadsheetFolder = INIValue ( "EditFiles" , "OutputFolder" )
+'M1FilePrefix = INIValue ( "EditFiles" , "OutputFilePrefix" )
+'M1SpreadsheetName = AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix )
+'
+'select *
+'	from M1Table
+'	where M1Status = "Recorded"
+'	into NewM1Records noselect
+'
+'if TableInfo ( NewM1Records , TAB_INFO_NROWS ) = 0 then
+'	note "No new records with which to generate an M1."
+'	exit sub
+'end if
+'
+'if M1SpreadsheetPath = "" then
+'	exit sub
+'end if
+'
+'if Ask ( "Will you be submitting this M1?" + chr$(10) + chr$(10) + "(If 'Yes', Common Ground will update the" + chr$(10) + "status of all current edits to 'Submitted'.)", "Yes" , "No" ) then
+'	update NewM1Records set M1Status = "Submitted"
+'	update NewM1Records set M1Form = M1SpreadsheetName
+'	select * from NewM1Records where obj into NewM1RecordsWithObjects noselect
+'	set style symbol MakeFontSymbol (35,16750640,12,"MapInfo Symbols",16,0)
+'	set coordsys table M1Table
+'	update NewM1RecordsWithObjects set obj = CreatePoint ( CentroidX (obj) , CentroidY (obj) )
+'	close table NewM1RecordsWithObjects
+'end if
+'
+'commit table M1Table
+'
+'select
+'	COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+'	from NewM1Records
+'	into M1SpreadsheetOutput noselect
+'
+''if LGACode = "301" then
+''	export M1SpreadsheetOutput
+''		into M1SpreadsheetPath
+''		type "DBF"
+''		charset "WindowsLatin1"
+''		overwrite
+''else
+'	export M1SpreadsheetOutput
+'		into M1SpreadsheetPath
+'		type "ASCII"
+'		charset "WindowsLatin1"
+'		titles
+'		overwrite
+''end if
+'
+'close table M1SpreadsheetOutput
+'close table NewM1Records
+'
+''if Ask ( "M1 generated and saved to:" + chr$(10) + M1SpreadsheetPath + chr$(10) + chr$(10) + "Do you wish to view the M1 spreadsheet?" , "Yes" , "No" ) then
+'if Ask ( "M1 generated and saved to:" + chr$(10) + PathToDirectory$ ( M1SpreadsheetPath ) + chr$(10) + M1SpreadsheetName + chr$(10) + chr$(10) + "Do you wish to view the M1 spreadsheet?" , "Yes" , "No" ) then
+'	if SpreadsheetAppPath() <> "" then
+'		run program """" & SpreadsheetAppPath() & """" & " " & """" & M1SpreadsheetPath & """"
+'	else
+'		note "Could not launch spreadsheet application."
+'	end if
+'end if
+'
+'end sub
+
+
+
+'================================================================================
+sub GenerateM1Dialog
+'================================================================================
+
+dim M1SpreadsheetFolder as string
+dim M1FilePrefix as string
+dim M1SpreadsheetName as string
+dim M1SpreadsheetPath as string
+
+dim NumEditsAllUsers as integer
+dim NumEditsCurrentUser as integer
+
+'dim UserFilter as smallint
+dim UpdateStatus as logical
+dim SpreadsheetFormat as smallint
+dim ViewSpreadsheet as logical
+
+' populate M1Table variable for if 'OpenTables' sub has not yet been run
+open table M1TablePath
+M1Table = TableInfo ( 0 , 1 )
+
+if TableInfo ( M1Table , TAB_INFO_EDITED ) then
+	if Ask ( "Save changes to M1 table?" , "Save" , "Cancel" ) then
+		commit table M1Table
+	else
+		exit sub
+	end if
+end if
+
+M1SpreadsheetFolder = INIValue ( "EditFiles" , "OutputFolder" )
+M1FilePrefix = INIValue ( "EditFiles" , "OutputFilePrefix" )
+M1SpreadsheetName = AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix , "" )
+
+select *
+	from M1Table
+	where M1Status = "Recorded"
+	into NewM1Records noselect
+
+if TableInfo ( NewM1Records , TAB_INFO_NROWS ) = 0 then
+	note "No new records with which to generate an M1."
+	close table NewM1Records
+	exit sub
+end if
+
+dialog
+	title "Generate M1"
+	width 240
+	calling GenerateM1DialogLaunchHandler
+	control GroupBox
+		position 10, 10
+		width 220 height 60
+		title "Include Edits Made By"
+	control RadioGroup
+		id USER_FILTER_RADIO
+		position 20, 25
+		title "All Users;Me (" + WindowsUserName() + ") Only"
+		value 1
+		into UserFilter
+		calling GenerateM1DialogInteractionHandler
+	control CheckBox
+		position 20, 55
+		title "Update the status of these edits to 'Submitted'"
+		value TRUE
+		into UpdateStatus
+	control GroupBox
+		position 10, 75
+		width 220 height 45
+		title "Spreadsheet Format"
+	control RadioGroup
+		position 20, 90
+		title "XLS (recommended);DBF (for exporting non-standard property numbers)"
+		value 1
+		into SpreadsheetFormat
+	control GroupBox
+		position 10, 125
+		width 220 height 65
+		title "Spreadsheet File"
+	control StaticText
+		position 20, 140
+		title "Folder:"
+	control StaticText
+		position 50, 140
+		title left$ ( M1SpreadsheetFolder , 45 ) + left$ ( "..." , 99 * int ( len (M1SpreadsheetFolder ) > 45 ) )
+	control StaticText
+		position 20, 155
+		title "File:"
+	control EditText
+		id SPREADSHEET_NAME_EDITTEXT
+		position 50, 155
+		width 170
+		value M1SpreadsheetName
+		into M1SpreadsheetName
+	control CheckBox
+		id VIEW_SPREADSHEET_CHECKBOX
+		position 20, 170
+		title "View Spreadsheet"
+		value TRUE
+		into ViewSpreadsheet
+	control OKButton
+	control CancelButton
+
+if not CommandInfo(CMD_INFO_DLG_OK) then
+	exit sub
+end if
+
+if M1SpreadsheetName = "" then
+	note "Invalid file name specified. Cancelling M1."
+	close table NewM1Records
+	exit sub
+end if
+
+do case UserFilter
+	case 1
+		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+			from NewM1Records
+			into M1SpreadsheetOutput noselect
+		select * from NewM1Records into RecordsToUpdate noselect
+	case 2
+		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+			from NewM1Records
+			where RecordedBy = WindowsUserName()
+			into M1SpreadsheetOutput noselect
+		select * from NewM1Records where RecordedBy = WindowsUserName() into RecordsToUpdate noselect
+end case
+
+if UpdateStatus then
+	update RecordsToUpdate set M1Status = "Submitted"
+	update RecordsToUpdate set M1Form = M1SpreadsheetName
+	select * from RecordsToUpdate where obj into NewM1RecordsWithObjects noselect
+	set style symbol MakeFontSymbol (35,16750640,12,"MapInfo Symbols",16,0)
+	set coordsys table M1Table
+	update NewM1RecordsWithObjects set obj = CreatePoint ( CentroidX (obj) , CentroidY (obj) )
+	close table NewM1RecordsWithObjects
+	commit table M1Table
+end if
+
+do case SpreadsheetFormat
+	case 1
+		M1SpreadsheetPath = M1SpreadsheetFolder + M1SpreadsheetName
+		export M1SpreadsheetOutput
+			into M1SpreadsheetPath
+			type "ASCII"
+			charset "WindowsLatin1"
+			titles
+			overwrite
+	case 2
+		M1SpreadsheetPath = M1SpreadsheetFolder + left$ ( M1SpreadsheetName , len ( M1SpreadsheetName ) - 4 ) + ".dbf"
+		export M1SpreadsheetOutput
+			into M1SpreadsheetPath
+			type "DBF"
+			charset "WindowsLatin1"
+			'overwrite
+			note "Remember to go 'Save As' in Excel, and change the file type to XLS" + chr$(13) + "to convert the DBF file into a standard Excel spreadsheet."
+end case
+
+close table M1SpreadsheetOutput
+close table NewM1Records
+
+if ViewSpreadsheet then
+	if SpreadsheetAppPath() <> "" then
+		run program """" & SpreadsheetAppPath() & """" & " " & """" & M1SpreadsheetPath & """"
+	else
+		note "Could not launch spreadsheet application."
+	end if
+end if
+
+note "M1 generated and saved to:" + chr$(10) + M1SpreadsheetPath
+
+end sub
+
+
+
+'================================================================================
+sub LaunchPIQAExport
+'================================================================================
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+call GeneratePIQAAddressExport
+
+if RatesParcelLinkedTablePath not in ( "" , "?" ) or RatesParcelView not in ( "" , "?" ) then
+	call GeneratePIQAParcelExport
+end if
+
+end sub
+
+
+
+'================================================================================
+sub GeneratePIQAAddressExport
+'================================================================================
+
+dim PIQAExportTablePath as string
+dim PIQAExportSpreadsheetPath as string
+dim PIQAExportTable as string
+dim UserPrompt as string
+dim NumExportRecords as integer
+
+
+PIQAExportTablePath = TempFileName$("")
+
+if LGACode in ( "301" , "304" ) then
+	PIQAExportSpreadsheetPath = FileSaveAsDlg ( GetFolderPath$(0) , "PIQA Address Export.DBF" , "DBF" , "Export PIQA Address Extract To" )
+else
+	PIQAExportSpreadsheetPath = FileSaveAsDlg ( GetFolderPath$(0) , "PIQA Address Export.CSV" , "CSV" , "Export PIQA Address Extract To" )
+end if
+
+if PIQAExportSpreadsheetPath = "" then
+	exit sub
+end if
+
+call CreatePIQAExportTable ( PIQAExportTablePath )
+open table PIQAExportTablePath
+PIQAExportTable = TableInfo ( 0 , 1 )
+set table PIQAExportTable fastedit on undo off
+
+call OpenRatesAddressTable
+if not IsTableOpen ( RatesAddressTable ) then
+	note "Table ""RatesAddressTable"" not open."
+	exit sub
+end if
+
+NumExportRecords = TableInfo ( RatesAddressTable , TAB_INFO_NROWS )
+
+call SmartAppend ( PIQAExportTable , RatesAddressTable , "" )
+
+update PIQAExportTable set roadnt_pr =  ucase$ (
+	STREET_NAME +
+	rtrim$ ( " " + STREET_TYPE ) +
+	rtrim$ ( " " + STREET_SUFFIX ) )
+
+update PIQAExportTable set stjoin_pr =  ucase$ (
+	roadnt_pr + " " + LOCALITY )
+
+update PIQAExportTable set address_pr =  ucase$ (
+	ltrim$ ( rtrim$ (
+	left$ ( SU_NO_1 + SU_SUFF_1 , 999 * int ( SU_NO_1 not in ( "" , "0" ) ) ) +
+	left$ ( "-" + SU_NO_2 + SU_SUFF_2 , 999 * int ( SU_NO_2 not in ( "" , "0" ) ) ) +
+	left$ ( "/", 999 * int ( SU_NO_1 not in ( "" , "0" ) ) ) +
+	HOUSE_PREFIX_1 + 
+	left$ ( HOUSE_NUMBER_1 , 999 * int ( HOUSE_NUMBER_1 not in ( "" , "0" ) ) ) +
+	HOUSE_SUFFIX_1 +
+	left$ ( "-" , 999 * int ( HOUSE_NUMBER_2 not in ( "" , "0" ) ) ) +
+	HOUSE_PREFIX_2 + 
+	left$ ( HOUSE_NUMBER_2 , 999 * int ( HOUSE_NUMBER_2 not in ( "" , "0" ) ) ) +
+	HOUSE_SUFFIX_2 +
+	" " +
+	stjoin_pr ) ) )
+
+update PIQAExportTable set address_propnum_pr =
+	address_pr + " " + propnum
+
+commit table PIQAExportTable
+
+if LGACode in ( "301" , "304" ) then
+	export PIQAExportTable
+		into PIQAExportSpreadsheetPath
+		type "DBF"
+		charset "WindowsLatin1"
+		overwrite
+else
+	export PIQAExportTable
+		into PIQAExportSpreadsheetPath
+		type "ASCII"
+		delimiter "," 
+		charset "WindowsLatin1"
+		titles
+		overwrite
+end if
+
+drop table PIQAExportTable
+
+'decide if this needs to be closed or dropped
+close table RatesAddressTable
+
+if not FileExists ( PIQAExportSpreadsheetPath ) then 
+	note "PIQA Export unsuccessful. Please contact support."
+	exit sub
+end if
+
+UserPrompt = ""
+UserPrompt = UserPrompt + "PIQA Address Export successful. " + NumExportRecords + " records exported." + chr$(10)
+UserPrompt = UserPrompt + chr$(10)
+if NumExportRecords > 65535 then
+	UserPrompt = UserPrompt + "The number of records in the spreadsheet is more than Excel will allow you to view, although all the records will remain present in the file." + chr$(10)
+	UserPrompt = UserPrompt + chr$(10)
+	UserPrompt = UserPrompt + "Please do not alter or resave the spreadsheet in Excel." + chr$(10)
+	UserPrompt = UserPrompt + chr$(10)
+end if
+UserPrompt = UserPrompt + "Do you wish to view the spreadsheet now?"
+
+if Ask ( UserPrompt , "Yes" , "No" ) then
+	if SpreadsheetAppPath() <> "" then
+		run program """" & SpreadsheetAppPath() & """" & " " & """" & PIQAExportSpreadsheetPath & """"
+	else
+		note "Could not launch spreadsheet application."
+	end if
+end if
+
+note "PIQA Address Export saved to:" + chr$(10) + PIQAExportSpreadsheetPath + chr$(10) + chr$(10) + "Email this file to DSE for processing."
+
+end sub
+
+
+
+'================================================================================
+sub GeneratePIQAParcelExport
+'================================================================================
+
+dim PIQAExportTablePath as string
+dim PIQAExportSpreadsheetPath as string
+dim PIQAExportTable as string
+dim UserPrompt as string
+dim NumExportRecords as integer
+
+
+PIQAExportTablePath = TempFileName$("")
+
+if LGACode in ( "301" , "304" ) then
+	PIQAExportSpreadsheetPath = FileSaveAsDlg ( GetFolderPath$(0) , "PIQA Parcel Export.DBF" , "DBF" , "Export PIQA Parcel Extract To" )
+else
+	PIQAExportSpreadsheetPath = FileSaveAsDlg ( GetFolderPath$(0) , "PIQA Parcel Export.CSV" , "CSV" , "Export PIQA Parcel Extract To" )
+end if
+
+if PIQAExportSpreadsheetPath = "" then
+	exit sub
+end if
+
+'call CreatePIQAExportTable ( PIQAExportTablePath )
+'open table PIQAExportTablePath
+'PIQAExportTable = TableInfo ( 0 , 1 )
+'set table PIQAExportTable fastedit on undo off
+
+call OpenRatesParcelTable
+PIQAExportTable = TableInfo ( 0 , 1 )
+
+if not IsTableOpen ( RatesParcelTable ) then
+	note "Table ""RatesParcelTable"" not open."
+	exit sub
+end if
+
+NumExportRecords = TableInfo ( RatesParcelTable , TAB_INFO_NROWS )
+
+if LGACode in ( "301" , "304" ) then
+	export PIQAExportTable
+		into PIQAExportSpreadsheetPath
+		type "DBF"
+		charset "WindowsLatin1"
+		overwrite
+else
+	export PIQAExportTable
+		into PIQAExportSpreadsheetPath
+		type "ASCII"
+		delimiter "," 
+		charset "WindowsLatin1"
+		titles
+		overwrite
+end if
+
+drop table PIQAExportTable
+
+if not FileExists ( PIQAExportSpreadsheetPath ) then 
+	note "PIQA Export unsuccessful. Please contact support."
+	exit sub
+end if
+
+UserPrompt = ""
+UserPrompt = UserPrompt + "PIQA Parcel Export successful. " + NumExportRecords + " records exported." + chr$(10)
+UserPrompt = UserPrompt + chr$(10)
+if NumExportRecords > 65535 then
+	UserPrompt = UserPrompt + "The number of records in the spreadsheet is more than Excel will allow you to view, although all the records will remain present in the file." + chr$(10)
+	UserPrompt = UserPrompt + chr$(10)
+	UserPrompt = UserPrompt + "Please do not alter or resave the spreadsheet in Excel." + chr$(10)
+	UserPrompt = UserPrompt + chr$(10)
+end if
+UserPrompt = UserPrompt + "Do you wish to view the spreadsheet now?"
+
+if Ask ( UserPrompt , "Yes" , "No" ) then
+	if SpreadsheetAppPath() <> "" then
+		run program """" & SpreadsheetAppPath() & """" & " " & """" & PIQAExportSpreadsheetPath & """"
+	else
+		note "Could not launch spreadsheet application."
+	end if
+end if
+
+note "PIQA Parcel Export saved to:" + chr$(10) + PIQAExportSpreadsheetPath + chr$(10) + chr$(10) + "Email this file to DSE for processing."
+
+end sub
+
+
+
+'================================================================================
+sub OpenRatesAddressTable
+'================================================================================
+
+dim QueryString as string
+
+if ODBCConnectionString in ( "" , "?" ) then
+	if FileExists ( RatesAddressLinkedTablePath ) then
+		open table RatesAddressLinkedTablePath
+		RatesAddressTable = TableInfo ( 0 , 1 )
+	else
+		note RatesAddressLinkedTablePath + chr$(13) + "does not exist."
+	end if
+	'---- use linked table
+	onerror goto CrashedWhileRefreshing
+	if TableInfo ( RatesAddressTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+		if RefreshLinkedTables then
+			server refresh RatesAddressTable
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+	onerror goto CrashedWhileConnectingToServer
+
+'	if ServerConnectionNumber = 0 then
+'		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+'	end if
+
+	do case ServerConnectionNumber
+		case 0
+			ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+		case else
+			if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+				ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+			end if
+	end case
+
+'	do case MIPRINXFieldType
+'		case "integer","float","decimal","number","double"
+'			QueryString = "select * from " + RatesAddressView + " where MI_PRINX = " + ActionPropNumValue
+'		case else
+'			QueryString = "select * from " + RatesAddressView + " where MI_PRINX = '" + ActionPropNumValue + "'"
+'	end case
+
+	QueryString = "select * from " + RatesAddressView
+
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempAddressLinkTable
+		file TempFileName$("")
+	RatesAddressTable = TableInfo ( 0 , 1 )
+
+end if
+
+exit sub
+
+CrashedWhileRefreshing:
+	note Error$()
+	if Ask ( "Problem occurred while connecting to rates database." + chr$(13) + chr$(13) + "Do you wish to use a previous copy of the data?" , "Yes" , "No" ) then
+		resume AfterRefresh
+	else
+		exit sub
+	end if
+
+CrashedWhileConnectingToServer:
+	'note "Error encountered while attempting to connect to server."
+	note Error$()
+
+
+end sub
+
+
+
+'================================================================================
+sub OpenRatesParcelTable
+'================================================================================
+
+dim QueryString as string
+
+if ODBCConnectionString in ( "" , "?" ) then
+	if FileExists ( RatesParcelLinkedTablePath ) then
+		open table RatesParcelLinkedTablePath
+		RatesParcelTable = TableInfo ( 0 , 1 )
+	else
+		note RatesParcelLinkedTablePath + chr$(13) + "does not exist."
+	end if
+	'---- use linked table
+	onerror goto CrashedWhileRefreshing
+	if TableInfo ( RatesParcelTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+		if RefreshLinkedTables then
+			server refresh RatesAddressTable
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+	onerror goto CrashedWhileConnectingToServer
+
+'	if ServerConnectionNumber = 0 then
+'		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+'	end if
+
+	do case ServerConnectionNumber
+		case 0
+			ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+		case else
+			if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+				ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+			end if
+	end case
+
+	QueryString = "select * from " + RatesParcelView
+
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempParcelLinkTable
+		file TempFileName$("")
+	RatesParcelTable = TableInfo ( 0 , 1 )
+
+end if
+
+exit sub
+
+CrashedWhileRefreshing:
+	note Error$()
+	if Ask ( "Problem occurred while connecting to rates database." + chr$(13) + chr$(13) + "Do you wish to use a previous copy of the data?" , "Yes" , "No" ) then
+		resume AfterRefresh
+	else
+		exit sub
+	end if
+
+CrashedWhileConnectingToServer:
+	'note "Error encountered while attempting to connect to server."
+	note Error$()
+
+
+end sub
+
+
+
+'================================================================================
+sub GenerateM1DialogInteractionHandler
+'================================================================================
+
+dim M1SpreadsheetFolder as string
+dim M1FilePrefix as string
+
+M1SpreadsheetFolder = INIValue ( "EditFiles" , "OutputFolder" )
+M1FilePrefix = INIValue ( "EditFiles" , "OutputFilePrefix" )
+
+do case ReadControlValue ( USER_FILTER_RADIO )
+	case 1 alter control SPREADSHEET_NAME_EDITTEXT value AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix , "" )
+	case 2 alter control SPREADSHEET_NAME_EDITTEXT value AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix , WindowsUserName() )
+end case
+
+end sub
+
+
+
+'================================================================================
+sub GenerateM1DialogLaunchHandler
+'================================================================================
+
+if SpreadsheetAppPath() in ( "" , "?" )  then
+	alter control VIEW_SPREADSHEET_CHECKBOX value 0 disable
+end if
+
+end sub
+
+
+
+'===========================================================================
+sub CreateM1Table ( byval TablePath as string )
+'===========================================================================
+
+onerror goto Err
+
+dim M1TableProjection as string
+
+M1TableProjection = INIValue ( "EditFiles" , "TableProjection" )
+
+close table M1 interactive
+
+create table "M1" (
+		property_pfi Char (10) ,
+		parcel_pfi Char (10) ,
+		multi_assess Char (10) ,
+		retired_propnum Char (20) ,
+		base_propnum Char (20) ,
+		propnum Char (20) ,
+		crefno Char (20) ,
+		spi Char (20) ,
+		part_p Char (10) ,
+		plan_number Char (10) ,
+		lot_number Char (10) ,
+		allotment Char (10) ,
+		section_p Char (10) ,
+		block_c Char (10) ,
+		portion Char (10) ,
+		subdivision Char (10) ,
+		parish_code Char (10) ,
+		township_code Char (10) ,
+		su_type Char (10) ,
+		su_prefix_1 Char (10) ,
+		su_no_1 Char (10) ,
+		su_suff_1 Char (10) ,
+		su_prefix_2 Char (10) ,
+		su_no_2 Char (10) ,
+		su_suff_2 Char (10) ,
+		fl_type Char (10) ,
+		fl_prefix_1 Char (10) ,
+		fl_no_1 Char (10) ,
+		fl_suff_1 Char (10) ,
+		fl_prefix_2 Char (10) ,
+		fl_no_2 Char (10) ,
+		fl_suff_2 Char (10) ,
+		pr_name_1 Char (100) ,
+		pr_name_2 Char (100) ,
+		loc_des Char (100) ,
+		house_prefix_1 Char (10) ,
+		house_number_1 Char (10) ,
+		house_suffix_1 Char (10) ,
+		house_prefix_2 Char (10) ,
+		house_number_2 Char (10) ,
+		house_suffix_2 Char (10) ,
+		display_prefix_1 Char (10) ,
+		display_no_1 Char (10) ,
+		display_suffix_1 Char (10) ,
+		display_prefix_2 Char (10) ,
+		display_no_2 Char (10) ,
+		display_suffix_2 Char (10) ,
+		street_name Char (50) ,
+		street_type Char (20) ,
+		street_suffix Char (10) ,
+		locality Char (50) ,
+		postcode Char (10) ,
+		dist_related_flag Char (10) ,
+		primary Char (10) ,
+		easting Char (12) ,
+		northing Char (12) ,
+		datum_proj Char (20) ,
+		outside_property Char (10) ,
+		edit_code Char (10) ,
+		Comments Char (100) ,
+		DateRecorded Date ,
+		TimeRecorded Char(10) ,
+		RecordedBy Char (20) ,
+		M1Status Char (20) ,
+		M1Form Char (50) )
+	file M1TablePath
+
+do case M1TableProjection
+	case "MGA54"	create map for M1 coordsys Earth Projection 8, 33, "m", 141, 0, 0.9996, 500000, 10000000
+	case "MGA55"	create map for M1 coordsys Earth Projection 8, 33, "m", 147, 0, 0.9996, 500000, 10000000
+end case
+
+exit sub
+
+Err:
+	note "Check that the M1 Table file path specified" + chr$(10) + "in the INI file is a valid path."
+
+end sub
+
+
+
+'===========================================================================
+sub CreatePIQAExportTable ( byval TablePath as string )
+'===========================================================================
+
+close table PIQAExport interactive
+
+create table "PIQAExport" (
+		propnum Char (20) ,
+		su_type Char (10) ,
+		su_prefix_1 Char (10) ,
+		su_no_1 Char (10) ,
+		su_suff_1 Char (10) ,
+		su_prefix_2 Char (10) ,
+		su_no_2 Char (10) ,
+		su_suff_2 Char (10) ,
+		fl_type Char (10) ,
+		fl_prefix_1 Char (10) ,
+		fl_no_1 Char (10) ,
+		fl_suff_1 Char (10) ,
+		fl_prefix_2 Char (10) ,
+		fl_no_2 Char (10) ,
+		fl_suff_2 Char (10) ,
+		pr_name_1 Char (100) ,
+		pr_name_2 Char (100) ,
+		loc_des Char (100) ,
+		house_prefix_1 Char (10) ,
+		house_number_1 Char (10) ,
+		house_suffix_1 Char (10) ,
+		house_prefix_2 Char (10) ,
+		house_number_2 Char (10) ,
+		house_suffix_2 Char (10) ,
+		display_prefix_1 Char (10) ,
+		display_no_1 Char (10) ,
+		display_suffix_1 Char (10) ,
+		display_prefix_2 Char (10) ,
+		display_no_2 Char (10) ,
+		display_suffix_2 Char (10) ,
+		street_name Char (50) ,
+		street_type Char (20) ,
+		street_suffix Char (10) ,
+		locality Char (50) ,
+		postcode Char (10) ,
+		roadnt_pr Char (100) ,
+		stjoin_pr Char (100) ,
+		address_pr Char (100) ,
+		address_propnum_pr Char (100) )
+	file TablePath
+
+end sub
+
+
+
+'================================================================================
+sub About
+'================================================================================
+
+dim RegistrationDetails as string
+dim ApplicationFilePath as string
+
+ApplicationFilePath = ApplicationDirectory$() & "Common Ground.MBX"
+
+if INIValue ( "Registration" , "OrganisationName" ) not in ( "" , "?" ) then
+	RegistrationDetails = "Registered to " + INIValue ( "Registration" , "OrganisationName" )
+end if
+
+dialog
+	title "About Common Ground"
+	control StaticText
+		title "Common Ground - Build " & BuildNum
+		position 15, 15
+	control StaticText
+		title ApplicationDesc
+		position 15, 25
+	control StaticText
+		title CopyrightNotice
+		position 15, 40
+	control StaticText
+		title RegistrationDetails
+		position 15, 55
+	control StaticText
+		title "Installation Path: "
+		position 15, 70
+	control StaticText
+		title left$(ApplicationFilePath,50)
+		position 22, 80
+	control StaticText
+		title ltrim$(mid$(ApplicationFilePath,51,50))
+		position 22, 90
+	control GroupBox
+		position 5, 5
+		width 210
+		height 102
+	control OKButton
+	control Button
+		title ApplicationWebsite width 95
+		calling LaunchApplicationWebsite
+
+end sub
+
+
+
+'================================================================================
+sub LaunchSpatialDatamartWebsite
+'================================================================================
+call LaunchWebsite ( "http://services.land.vic.gov.au/SpatialDatamart/login.jsp" )
+end sub
+
+
+
+'================================================================================
+sub LaunchApplicationWebsite
+'================================================================================
+call LaunchWebsite ( ApplicationWebsite )
+end sub
+
+
+
+'================================================================================
+sub AuditQuery
+'================================================================================
+
+dim AuditResults as string
+dim AuditResultsBrowserWindowID as integer
+
+call OpenTables
+
+do case CommandInfo ( CMD_INFO_MENUITEM )
+	'Council Data
+	case 1311	call AuditQueryCouncilUnmatchedPropNum
+	case 1313	call AuditQueryCouncilLocalityDiscrepancy
+	'Address
+	case 1411	call AuditQueryAddressDiscrepancy
+	'Property
+	case 1111	call AuditQueryPropertyNoPropNum
+	case 1112	call AuditQueryPropertyNoPropNumNonCrown
+	case 1115	call AuditQueryPropertyInvalidPropNum
+	case 1117	call AuditQueryPropertyNonContiguous
+	'Parcel
+	case 1211	call AuditQueryParcelNoCrefNo
+end case
+
+AuditResults = TableInfo ( 0 , 1 )
+browse * from AuditResults
+AuditResultsBrowserWindowID = FrontWindow()
+
+if IsMapWindowOpen() then
+	
+	call TileWindowsForAudit ( CurrentMapWindow , AuditResultsBrowserWindowID , 6 )
+
+	if not DoesMapContainLayer ( CurrentMapWindow , VicmapPropertyTable ) then
+		call AddLayerToMap ( VicmapPropertyTablePath , LAYERHIDE )
+	end if
+
+	if not DoesMapContainLayer ( CurrentMapWindow , VicmapParcelTable ) then
+		call AddLayerToMap ( VicmapParcelTablePath , LAYERHIDE )
+	end if
+
+	set window CurrentMapWindow front
+	set map redraw off
+
+	if DoesMapContainLayer ( CurrentMapWindow , CurrentAuditResultsDisplayLayer ) then
+		remove map window CurrentMapWindow layer CurrentAuditResultsDisplayLayer
+	end if
+
+	if AuditResults not in ( "Council_UnmatchedPropNum" , "Property_NonContiguous" ) then
+		add map window CurrentMapWindow auto layer AuditResults 
+		set map window CurrentMapWindow layer AuditResults
+			display global
+			editable off
+			selectable off
+			global line (1,2,0)
+			'global pen (1,2,16748688)
+			'global brush (39,16748688)
+			'global symbol (35,16748688,20,"MapInfo Symbols",288,0)
+			'---- changed 2007-11-15, Mildura - made layer style more bold
+			'global pen (2,2,16711680)
+			'global brush (7,16711680)
+			'global symbol (37,16711680,20,"MapInfo Symbols",288,0)
+			'---- changed 2008-05-12, Moreland - made line style thicker with no fill
+			global pen (4,2,16711680)
+			global brush (1,16777215)
+			global symbol (41,16711680,24,"MapInfo Symbols",289,0)
+		set map redraw on
+	end if
+
+	CurrentAuditResultsDisplayLayer = AuditResults
+
+end if
+
+end sub
+
+
+
+'================================================================================
+sub Help
+'================================================================================
+run program ApplicationDirectory$() + "Common Ground.PDF"
+end sub
+
+
+
+'================================================================================
+sub Exit
+'================================================================================
+
+alter menu bar remove "&Common Ground"
+alter menu ID 4 remove "&Common Ground"
+end program
+
+end sub
+
+
+

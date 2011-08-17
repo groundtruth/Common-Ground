@@ -1,0 +1,1300 @@
+include "Common Ground.DEF"
+
+declare sub PropertyDialogInteractionHandler
+declare sub ActionPropNumVerifyButtonHandler
+declare sub ActionCrefNoVerifyButtonHandler
+declare sub LaunchAddressDialog
+declare sub UpdateOKButtonStatus
+
+dim IsPropNumVerified as logical
+dim IsCrefNoVerified as logical
+
+dim DidUserJustHitPropNumVerifyButton as logical
+
+
+'================================================================================
+sub PropertyDialog
+'================================================================================
+
+dim GroupBoxMargin as smallint
+dim GroupBoxWidth as smallint
+dim TextMargin as smallint
+dim ListMargin as smallint
+dim ListWidth as smallint
+dim DialogWidth as smallint
+dim EditTextWidth as smallint
+dim ActionPopupWidth as smallint
+dim EditTextPosX as smallint
+dim VerifyButtonX as smallint
+dim VerifyButtonWidth as smallint
+
+DialogWidth = 270
+GroupBoxMargin = 10
+GroupBoxWidth = DialogWidth - ( 2 * GroupBoxMargin )
+TextMargin = GroupBoxMargin + 10
+ListMargin = GroupBoxMargin + 50
+ListWidth = GroupBoxWidth - ListMargin
+ActionPopupWidth = 65
+EditTextWidth = ListWidth - ActionPopupWidth - 5
+EditTextPosX = ListMargin + ActionPopupWidth + 5
+VerifyButtonWidth = 35
+VerifyButtonX = EditTextPosX + EditTextWidth - VerifyButtonWidth
+
+TargetParcelPicklistValue = 1
+TargetPropertyPicklistValue = 1
+TargetAddressPicklistValue = 1
+
+call PopulateVicmapPropertyDetails ( VicmapParcelDetails ( 1 ) . PARCEL_PFI )
+
+'Surf Coast Shire tend to delete property polygons, so we need to exit here before program crashes
+if ubound ( VicmapPropertyDetails ) = 0 then
+	note "No property detected." + chr$(10) + "Unable to continue."
+	exit sub
+end if
+
+call PopulateVicmapAddressDetails ( VicmapPropertyDetails ( 1 ) . PROPERTY_PFI )
+call PopulateExtentArray ( VicmapPropertyDetails ( 1 ) . NumParcels )
+
+dialog
+	title "Common Ground - Property/Parcel Edit"
+	calling PropertyDialogLaunchHandler
+	width DialogWidth
+
+	control GroupBox
+		position GroupBoxMargin, 10
+		width GroupBoxWidth height 80
+		title "Target"
+	control StaticText
+		position TextMargin, 25
+		title "Parcel:"
+	control PopupMenu
+		ID TARGET_PARCEL_POPUP
+		position ListMargin, 24
+		width ListWidth
+		title from variable ParcelDescPicklistArray
+		calling PropertyDialogInteractionHandler
+	control StaticText
+		position TextMargin, 40
+		title "Property:"
+	control PopupMenu
+		ID TARGET_PROPNUM_POPUP
+		position ListMargin, 39
+		width ListWidth
+		title from variable PropDescPicklistArray
+		calling PropertyDialogInteractionHandler
+	control StaticText
+		position TextMargin, 55
+		title "Address:"
+	control PopupMenu
+		ID TARGET_ADDRESS_POPUP
+		position ListMargin, 54
+		width ListWidth
+		title from variable AddressDescPicklistArray
+		calling PropertyDialogInteractionHandler
+	control StaticText
+		position TextMargin, 70
+		title "Extent:"
+	control PopupMenu
+		ID TARGET_EXTENT_POPUP
+		position ListMargin , 70
+		width ListWidth
+		title from variable ExtentPicklistArray
+		calling PropertyDialogInteractionHandler
+
+	'---------------------------------------------------------------
+
+	control GroupBox
+		position GroupBoxMargin, 100
+		width GroupBoxWidth height 65
+		title "Action"
+	control StaticText
+		position TextMargin, 115
+		title "PropNum:"
+	control PopupMenu
+		ID ACTION_PROPNUM_POPUP
+		position ListMargin, 114
+		width ActionPopupWidth
+		title "no action;modify;add multi-ass;remove"
+		calling PropertyDialogInteractionHandler
+	control EditText
+		ID ACTION_PROPNUM_EDITTEXT
+		position EditTextPosX, 114
+		width EditTextWidth - 40
+		value VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM
+		into UserInputPropertyNumber
+		disable
+
+	control Button
+		ID ACTION_PROPNUM_VERIFY_BUTTON
+		position VerifyButtonX, 114
+		width VerifyButtonWidth
+		height 12
+		'title "Check"
+		calling ActionPropNumVerifyButtonHandler
+
+	control StaticText
+		position TextMargin, 130
+		title "Address:"
+	control PopupMenu
+		ID ACTION_ADDRESS_POPUP
+		position ListMargin, 129
+		width ActionPopupWidth
+		title "no action;modify;add secondary;remove"
+		calling PropertyDialogInteractionHandler
+	control EditText
+		ID ACTION_ADDRESS_EDITTEXT
+		position EditTextPosX , 129
+		width EditTextWidth
+		disable
+	control StaticText
+		ID ACTION_CREFNO_LABEL
+		position TextMargin, 145
+		title "CrefNo:"
+	control PopupMenu
+		ID ACTION_CREFNO_POPUP
+		position ListMargin, 144
+		width ActionPopupWidth
+		title "no action;modify;remove"
+		calling PropertyDialogInteractionHandler
+	control EditText
+		ID ACTION_CREFNO_EDITTEXT
+		position EditTextPosX, 144
+		width EditTextWidth - 40
+		value VicmapParcelDetails ( 1 ) . CREFNO
+		into UserInputCrefNo
+		disable
+
+	control Button
+		ID ACTION_CREFNO_VERIFY_BUTTON
+		position VerifyButtonX, 144
+		width VerifyButtonWidth
+		height 12
+		title "Verify"
+		'calling ActionCrefNoVerifyButtonHandler
+		disable
+
+	control StaticText
+		position 20, 165
+		title " "
+
+	'---------------------------------------------------------------
+
+	control OKButton
+		ID THE_OK_BUTTON
+		disable
+		calling UpdateValuesFromPropertyDialogPicklists
+	control CancelButton
+		ID THE_CANCEL_BUTTON
+	control Button
+		ID THE_HELP_BUTTON
+		title "Help"
+		disable
+
+end sub
+
+
+
+'================================================================================
+sub UpdateValuesFromPropertyDialogPicklists
+'================================================================================
+
+TargetParcelPicklistValue = ReadControlValue ( TARGET_PARCEL_POPUP )
+TargetPropertyPicklistValue = ReadControlValue ( TARGET_PROPNUM_POPUP )
+TargetAddressPicklistValue = ReadControlValue ( TARGET_ADDRESS_POPUP )
+TargetExtentPicklistValue = ReadControlValue ( TARGET_EXTENT_POPUP )
+
+ActionPropNumPicklistValue =  ReadControlValue ( ACTION_PROPNUM_POPUP )
+ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
+ActionCrefNoPicklistValue = ReadControlValue ( ACTION_CREFNO_POPUP )
+
+end sub
+
+
+
+'================================================================================
+sub PropertyDialogLaunchHandler
+'================================================================================
+
+if Ubound ( ParcelDescPicklistArray ) < 2 then
+	alter control TARGET_PARCEL_POPUP disable
+end if
+
+if Ubound ( PropDescPicklistArray ) < 2 then
+	alter control TARGET_PROPNUM_POPUP disable
+end if
+
+if Ubound ( AddressDescPicklistArray ) < 2 then
+	alter control TARGET_ADDRESS_POPUP disable
+end if
+
+if Ubound ( ExtentPicklistArray ) < 2 then
+	alter control TARGET_EXTENT_POPUP disable
+end if
+
+'---- remove the focus from the Address and CrefNo popups (can't seem to actually set the focus on PropNum popup control)
+alter control ACTION_ADDRESS_POPUP disable
+alter control ACTION_ADDRESS_POPUP enable
+alter control ACTION_CREFNO_POPUP disable
+if CrefNoEditMode and Ubound ( ExtentPicklistArray ) < 2 then
+	alter control ACTION_CREFNO_POPUP enable
+end if
+
+
+'---- remove and/or disable options for unmatched properties
+'if VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM = "" then
+'	alter control ACTION_ADDRESS_POPUP disable
+'	'---- properties with pending M1s will still require the 'add multi-assess' option, so check before removing menu options
+'	if NumPendingM1sInProperty ( VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI ) = 0 then
+'		alter control ACTION_PROPNUM_POPUP title "no action;set to...;"
+'	end if
+'end if
+
+do case CrefNoEditMode
+	case TRUE
+		alter control ACTION_CREFNO_LABEL enable
+		alter control ACTION_CREFNO_POPUP enable
+	case FALSE
+		alter control ACTION_CREFNO_LABEL disable
+		alter control ACTION_CREFNO_POPUP disable
+		alter control ACTION_CREFNO_VERIFY_BUTTON disable
+end case
+
+alter control ACTION_ADDRESS_POPUP disable
+
+' open up a saved copy of the council's address database instead of an ODBC connection if needed
+if ODBCConnectionString in ( "" , "?" ) and RatesAddressLinkedTablePath not in ( "" , "?" ) then
+	if not IsTableOpen ( RatesAddressTable ) or RatesAddressTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressTable = TableInfo ( 0 , 1 )
+	end if
+end if
+
+call PropertyDialogInteractionHandler
+
+end sub
+
+
+
+'================================================================================
+sub ActionPropNumVerifyButtonHandler
+'================================================================================
+
+'dim ServerConnectionNumber as integer
+dim QueryString as string
+
+dim ActionPropNumValue as string
+ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
+if ActionPropNumValue = "" then
+	exit sub
+end if
+
+if ActionPropNumValue = "NCPR" then
+	IsPropNumVerified = TRUE
+	alter control ACTION_PROPNUM_EDITTEXT disable
+	alter control ACTION_PROPNUM_EDITTEXT value "NCPR"    '---- force it to upper case
+	alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
+	goto NCPR
+end if
+
+' for testing purposes where there is no rates link
+'if RatesAddressView = "" then
+'	IsPropNumVerified = TRUE
+'	goto NoRatesConnection
+'end if
+
+redim RatesAddressDetails ( 1 )
+
+if IsTableOpen ( "TempAddressLinkTable" ) then
+	drop table TempAddressLinkTable
+end if
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto CrashedWhileRefreshing
+	if TableInfo ( RatesAddressTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+		if RefreshLinkedTables then
+			server refresh RatesAddressTable
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+	onerror goto CrashedWhileConnectingToServer
+
+'	if ServerConnectionNumber = 0 then
+'		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+'	end if
+
+	do case ServerConnectionNumber
+		case 0
+			ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+		case else
+			if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+				ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+			end if
+	end case
+
+	do case MIPRINXFieldType
+		case "integer","float","decimal","number","double"
+			QueryString = "select * from " + RatesAddressView + " where MI_PRINX = " + ActionPropNumValue
+		case else
+			QueryString = "select * from " + RatesAddressView + " where MI_PRINX = '" + ActionPropNumValue + "'"
+	end case
+
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempAddressLinkTable
+		file TempFileName$("")
+	RatesAddressTable = TableInfo ( 0 , 1 )
+
+end if
+
+select *
+	from RatesAddressTable
+	where PROPNUM = ActionPropNumValue
+	into RatesAddressQuery noselect
+
+'----------------------------------------------------------
+' new 23-Oct-2006 (Bendigo)
+' This is a quicker way of getting the address than with a query
+' that uses both the Property and Address table at the same time.
+' This may become redundant if the address table includes a PropNum field.
+
+dim ActionPropPFIValue as string
+dim i as smallint
+
+'---- list all properties matching the ActionPropNumValue
+select PROP_PFI
+	from VicmapPropertyTable
+	where PROP_PROPNUM = ActionPropNumValue and
+		  PROP_LGA_CODE = LGACode
+	into PropertyPFIQuery noselect
+
+
+'---- generate VicmapAddressQuery table that contains either
+'---- a matching primary address or zero records
+
+do case TableInfo ( PropertyPFIQuery , TAB_INFO_NROWS )
+
+	case 0
+		'---- generate blank table
+		select *
+			from VicmapAddressTable
+			where 1 <> 1
+			into VicmapAddressQuery noselect
+
+	case else
+		'---- cycle through the selected properties until one is found that links
+		'---- to a record in the address table
+		fetch first from PropertyPFIQuery
+		ActionPropPFIValue = PropertyPFIQuery . PROP_PFI
+		for i = 1 to TableInfo ( PropertyPFIQuery , TAB_INFO_NROWS )
+			select *
+				from VicmapAddressTable
+				where PROPERTY_PFI = ActionPropPFIValue and
+					  IS_PRIMARY = "Y"
+				into VicmapAddressQuery noselect
+			'if TableInfo ( VicmapAddressQuery , TAB_INFO_NROWS ) = 1 then
+			if TableInfo ( VicmapAddressQuery , TAB_INFO_NROWS ) > 0 then
+				exit for
+			else
+				fetch next from PropertyPFIQuery
+				ActionPropPFIValue = PropertyPFIQuery . PROP_PFI
+			end if
+		next
+
+end case
+
+
+close table PropertyPFIQuery
+
+redim ActionVicmapAddressDetails ( 1 )
+call UpdateAddressArrayFromRecord ( ActionVicmapAddressDetails ( 1 ) , VicmapAddressQuery , 1 )
+'alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
+
+do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
+
+	'---- found no matching record in Rates table
+	case 0
+
+		if Ask ( "Could not find this property number" + chr$(13) + "in " + RatesDataSource + "." + chr$(13) + chr$(13) + "Do you still wish to use this number?", "Yes" , "No" ) then
+			IsPropNumVerified = TRUE
+			alter control ACTION_PROPNUM_EDITTEXT disable
+			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
+			alter control ACTION_ADDRESS_POPUP enable value ADDRESS_MODIFY
+		else
+			IsPropNumVerified = FALSE
+			alter control ACTION_PROPNUM_EDITTEXT enable
+		end if
+
+	'--- found matching record in Rates table
+	case else
+
+		IsPropNumVerified = TRUE
+
+		alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
+
+		if TableInfo ( RatesAddressQuery , TAB_INFO_NROWS ) > 1 then
+			note "Common Ground has detected multiple addresses" + chr$(13) + "for this property number in " + RatesDataSource + "." + chr$(13) + chr$(13) + "Please ensure that displayed address is correct."
+		end if
+
+		if TargetExtentPicklistValue = EXTENT_WHOLE_PROPERTY or
+		  ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum then 
+
+			alter control ACTION_ADDRESS_POPUP enable
+			alter control ACTION_PROPNUM_EDITTEXT disable
+			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
+	
+			call UpdateAddressArrayFromRecord ( RatesAddressDetails ( 1 ) , RatesAddressQuery , 1 )
+
+			if TableInfo ( VicmapAddressQuery , TAB_INFO_NROWS ) = 0 or not AddressMatch ( ActionVicmapAddressDetails ( 1 ) , RatesAddressDetails ( 1 ) ) then
+				alter control ACTION_ADDRESS_POPUP value ADDRESS_MODIFY
+			end if
+
+		end if
+
+end case
+
+close table RatesAddressQuery
+close table VicmapAddressQuery
+
+NCPR:
+
+DidUserJustHitPropNumVerifyButton = TRUE
+call PropertyDialogInteractionHandler
+
+exit sub
+
+CrashedWhileRefreshing:
+	if Ask ( "Problem occurred while connecting to rates database." + chr$(13) + chr$(13) + "Do you wish to use a previous copy of the data?" , "Yes" , "No" ) then
+		resume AfterRefresh
+	else
+		exit sub
+	end if
+
+CrashedWhileConnectingToServer:
+	'note "Error encountered while attempting to connect to server."
+	note Error$()
+
+end sub
+
+
+
+'================================================================================
+sub PropertyDialogInteractionHandler
+'================================================================================
+
+dim ActionCrefNoValue as string
+
+if DidUserJustHitPropNumVerifyButton then
+	goto PropNumCheckButton
+end if
+
+do case TriggerControl ()
+
+	case TARGET_PARCEL_POPUP goto ParcelTarget
+	case TARGET_PROPNUM_POPUP goto PropertyTarget
+	case TARGET_ADDRESS_POPUP goto AddressTarget
+	case TARGET_EXTENT_POPUP goto ExtentTarget
+
+	case ACTION_PROPNUM_POPUP goto PropNumAction
+	case ACTION_ADDRESS_POPUP goto AddressAction
+	case ACTION_CREFNO_POPUP goto CrefNoAction
+
+end case
+
+
+'-------------------------------------------------------------------------------------
+ParcelTarget:
+
+TargetParcelPicklistValue = ReadControlValue ( TARGET_PARCEL_POPUP )
+
+call PopulateVicmapPropertyDetails ( VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI )
+alter control TARGET_PROPNUM_POPUP title from variable PropDescPicklistArray
+if ubound ( VicmapPropertyDetails ) > 1 then
+	alter control TARGET_PROPNUM_POPUP enable
+else
+	alter control TARGET_PROPNUM_POPUP disable
+end if
+
+'this line has been moved below so that it is always updated whenever the target extent or propnum action are changed
+'alter control ACTION_CREFNO_EDITTEXT value VicmapParcelDetails ( TargetParcelPicklistValue ) . CREFNO
+
+if CrefNoEditMode then
+	TargetParcelPicklistValue = ReadControlValue ( TARGET_PARCEL_POPUP )
+	if VicmapParcelDetails ( TargetParcelPicklistValue ) . CREFNO in ("","0") then
+		alter control ACTION_CREFNO_VERIFY_BUTTON disable
+	else
+		if IsPropNumVerified then
+			'alter control ACTION_CREFNO_VERIFY_BUTTON enable
+		end if
+	end if
+end if
+
+
+'-------------------------------------------------------------------------------------
+PropertyTarget:
+
+TargetPropertyPicklistValue = ReadControlValue ( TARGET_PROPNUM_POPUP )
+
+call PopulateVicmapAddressDetails ( VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI )
+alter control TARGET_ADDRESS_POPUP title from variable AddressDescPicklistArray
+
+if ubound ( VicmapAddressDetails ) > 1 then
+	alter control TARGET_ADDRESS_POPUP enable
+else
+	alter control TARGET_ADDRESS_POPUP disable
+end if
+
+call PopulateExtentArray ( VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels )
+alter control TARGET_EXTENT_POPUP title from variable ExtentPicklistArray
+do case VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels
+	case 1		alter control TARGET_EXTENT_POPUP disable
+	case else	alter control TARGET_EXTENT_POPUP enable
+end case
+
+
+'-------------------------------------------------------------------------------------
+AddressTarget:
+
+TargetAddressPicklistValue = ReadControlValue ( TARGET_ADDRESS_POPUP )
+
+
+'-------------------------------------------------------------------------------------
+ExtentTarget:
+
+'---- disable Extent action for secondary addresses (checking that the property does have more than one address)
+if VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY =  "N" and Ubound ( AddressDescPicklistArray ) > 1 then
+	alter control TARGET_EXTENT_POPUP value EXTENT_WHOLE_PROPERTY disable
+'else
+'	if VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels > 1 then
+'		alter control TARGET_EXTENT_POPUP enable
+'	end if
+end if
+
+'---- disable Extent action for base properties
+if VicmapPropertyDetails ( TargetPropertyPicklistValue ) . VIEW_FEATURE_TYPE in ( "27723" , "27743" , "5723" , "5743" ) then
+	alter control TARGET_EXTENT_POPUP value EXTENT_WHOLE_PROPERTY disable
+end if
+
+TargetExtentPicklistValue = ReadControlValue ( TARGET_EXTENT_POPUP )
+
+'---- highlight extent in map window (shows up if PARCEL_MP and PROPERTY_MP are in the map window)
+do case  TargetExtentPicklistValue
+	case EXTENT_WHOLE_PROPERTY	select * from VicmapPropertyTable where PROP_PFI = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI into Selection
+	case EXTENT_THIS_PARCEL		select * from VicmapParcelTable where PARCEL_PFI = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI into Selection
+end case
+
+'---- refresh window after new parcel selection - needed for MI versions less than 8.5
+if TriggerControl () = TARGET_EXTENT_POPUP then
+	update window CurrentMapWindow
+	set map window CurrentMapWindow
+		center ( MapperInfo ( CurrentMapWindow , MAPPER_INFO_CENTERX ) , MapperInfo ( CurrentMapWindow , MAPPER_INFO_CENTERY ) )
+end if
+
+alter control ACTION_PROPNUM_POPUP value PROPNUM_NO_ACTION
+
+
+'-------------------------------------------------------------------------------------
+PropNumAction:
+
+'---- disable PropNum action for secondary addresses (checking that the property does more than one addresse)
+if VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY =  "N" and Ubound ( AddressDescPicklistArray ) > 1 then
+	alter control ACTION_PROPNUM_POPUP disable
+else
+	alter control ACTION_PROPNUM_POPUP enable
+end if
+
+ActionPropNumPicklistValue =  ReadControlValue ( ACTION_PROPNUM_POPUP )
+
+do case ActionPropNumPicklistValue
+	case PROPNUM_NO_ACTION
+		alter control ACTION_PROPNUM_EDITTEXT value VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM disable
+		IsPropNumVerified = FALSE
+		ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
+		if ActionPropNumValue in ("","0") then
+			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" disable
+		else
+			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" enable
+		end if
+	case PROPNUM_MODIFY , PROPNUM_ADD
+		alter control ACTION_PROPNUM_EDITTEXT value "" enable active
+		IsPropNumVerified = FALSE
+		alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" enable
+	case PROPNUM_REMOVE
+		alter control ACTION_PROPNUM_EDITTEXT value "" disable
+		IsPropNumVerified = TRUE
+		alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" disable
+end case
+
+alter control ACTION_ADDRESS_POPUP value ADDRESS_NO_ACTION disable
+alter control ACTION_ADDRESS_EDITTEXT value ""
+if EnforcePropNumCheck then
+	alter control ACTION_ADDRESS_POPUP disable
+end if
+
+
+'-------------------------------------------------------------------------------------
+PropNumCheckButton:
+
+'reset variable before continuing
+DidUserJustHitPropNumVerifyButton = FALSE
+
+if CrefNoEditMode then
+	alter control ACTION_CREFNO_POPUP value CREFNO_NO_ACTION
+	alter control ACTION_CREFNO_EDITTEXT value VicmapParcelDetails ( TargetParcelPicklistValue ) . CREFNO
+end if
+
+
+'-------------------------------------------------------------------------------------
+AddressAction:
+
+redim AddressDialogValues ( 0 )
+
+do case ExtentMode
+	case 1  'combined target for property/parcel
+			if IsPropNumVerified then
+				alter control ACTION_ADDRESS_POPUP enable
+			else
+				alter control ACTION_ADDRESS_POPUP disable
+			end if
+			if not EnforcePropNumCheck then
+				alter control ACTION_ADDRESS_POPUP enable
+			end if
+	case 2  'separate target for property and parcel
+		do case TargetExtentPicklistValue
+			case EXTENT_WHOLE_PROPERTY
+				if IsPropNumVerified then
+					alter control ACTION_ADDRESS_POPUP enable
+				else
+					alter control ACTION_ADDRESS_POPUP disable
+				end if
+				if not EnforcePropNumCheck then
+					alter control ACTION_ADDRESS_POPUP enable
+				end if
+			case EXTENT_THIS_PARCEL
+				alter control ACTION_ADDRESS_POPUP disable
+		end case
+end case
+
+ActionPropNumPicklistValue =  ReadControlValue ( ACTION_PROPNUM_POPUP )
+ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
+
+if ActionPropNumPicklistValue = PROPNUM_REMOVE or ActionPropNumValue = "NCPR" then
+	alter control ACTION_ADDRESS_POPUP disable value ADDRESS_NO_ACTION
+end if
+
+ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
+
+do case ActionAddressPicklistValue
+	case ADDRESS_NO_ACTION
+	case ADDRESS_MODIFY, ADDRESS_ADD
+		'alter control ACTION_ADDRESS_POPUP enable
+		if RatesAddressTable not in ("","?") then    '---- test for no rates link, eg, Stonnington demo
+			select * from RatesAddressTable where PROPNUM = ActionPropNumValue into RatesAddressQuery noselect
+			call UpdateAddressArrayFromRecord ( RatesAddressDetails ( 1 ) , RatesAddressQuery , 1 )
+		end if
+		call LaunchAddressDialog
+	case ADDRESS_REMOVE
+		alter control ACTION_ADDRESS_EDITTEXT value ""
+end case
+
+if IsPropNumVerified and
+  ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum  and
+  ActionPropNumPicklistValue <> PROPNUM_REMOVE and
+  ActionPropNumValue <> "NCPR" then
+	alter control ACTION_ADDRESS_POPUP enable
+end if
+
+'**** this is the code I used to "enable user to take further action on (ie, remove) addresses for NCPR properties",
+'**** substituting the code directly above.
+'**** this did not work the way I expected so I'm disabling reverting back to the original for now
+'if IsPropNumVerified and
+'  ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum  and
+'  ActionPropNumPicklistValue <> PROPNUM_REMOVE then
+'	alter control ACTION_ADDRESS_POPUP enable
+'end if
+
+
+
+'-------------------------------------------------------------------------------------
+CrefNoAction:
+
+if CrefNoEditMode then
+
+	do case ExtentMode
+		case 1  'combined target for property/parcel
+				if IsPropNumVerified then
+					alter control ACTION_CREFNO_POPUP enable
+				else
+					alter control ACTION_CREFNO_POPUP disable
+				end if
+		case 2  'separate target for property and parcel
+				do case TargetExtentPicklistValue
+					case EXTENT_WHOLE_PROPERTY
+						alter control ACTION_CREFNO_POPUP disable
+						alter control ACTION_CREFNO_EDITTEXT value ""
+					case EXTENT_THIS_PARCEL
+						if IsPropNumVerified then
+							alter control ACTION_CREFNO_POPUP enable
+						else
+							alter control ACTION_CREFNO_POPUP disable
+						end if
+				end case
+	end case
+
+
+	if ActionAddressPicklistValue in ( ADDRESS_ADD , ADDRESS_REMOVE ) then
+		alter control ACTION_CREFNO_POPUP value CREFNO_NO_ACTION disable
+		alter control ACTION_CREFNO_EDITTEXT disable
+		alter control ACTION_CREFNO_VERIFY_BUTTON disable
+	end if
+
+	ActionCrefNoPicklistValue = ReadControlValue ( ACTION_CREFNO_POPUP )
+
+	do case ActionCrefNoPicklistValue
+		case CREFNO_No_ACTION
+			if CrefNoEditMode then
+				alter control ACTION_CREFNO_EDITTEXT value VicmapParcelDetails ( TargetParcelPicklistValue ) . CREFNO disable
+			end if
+			ActionCrefNoValue = ReadControlValue ( ACTION_CREFNO_EDITTEXT )
+			if ActionCrefNoValue in ("","0") then
+				'alter control ACTION_CREFNO_VERIFY_BUTTON title "Verify" disable
+			else
+				'alter control ACTION_CREFNO_VERIFY_BUTTON title "Verify" enable
+			end if
+		case CREFNO_MODIFY
+			'alter control ACTION_CREFNO_VERIFY_BUTTON title "Verify" enable
+			alter control ACTION_CREFNO_EDITTEXT enable active
+		case CREFNO_REMOVE
+			'alter control ACTION_CREFNO_VERIFY_BUTTON title "Verify" disable
+			alter control ACTION_CREFNO_EDITTEXT value "" disable
+	end case
+
+end if
+
+
+'-------------------------------------------------------------------------------------
+FinalCheck:
+
+call UpdateOKButtonStatus
+
+end sub
+
+
+
+'================================================================================
+sub UpdateOKButtonStatus
+'================================================================================
+
+ActionPropNumPicklistValue =  ReadControlValue ( ACTION_PROPNUM_POPUP )
+ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
+ActionCrefNoPicklistValue = ReadControlValue ( ACTION_CREFNO_POPUP )
+
+if ActionPropNumPicklistValue = PROPNUM_NO_ACTION and
+	ActionAddressPicklistValue = ADDRESS_NO_ACTION and
+	ActionCrefNoPicklistValue = CREFNO_NO_ACTION then
+		alter control THE_OK_BUTTON disable
+else
+	if IsPropNumVerified and not TableInfo ( M1Table , TAB_INFO_READONLY ) then
+		alter control THE_OK_BUTTON enable
+	end if
+end if
+
+end sub
+
+
+
+'================================================================================
+function ParcelSummary ( InputParcel () as ParcelCaptureForm ) as string
+'================================================================================
+
+dim TempText as string
+
+if InputParcel () . SPI <> "" then
+	TempText = InputParcel () . SPI
+else
+'	TempText =
+'		left$ ( InputParcel () . PLAN_NUMBER + " " , 999 * int ( InputParcel () . PLAN_NUMBER <> "" )) +
+'		left$ ( "LOT " + InputParcel () . LOT_NUMBER + " " , 999 * int ( InputParcel () . LOT_NUMBER <> "" )) +
+'		left$ ( "PT " , 999 * int ( InputParcel () . PART = "P" )) +
+'		left$ ( "CA " + InputParcel () . ALLOTMENT + " " , 999 * int ( InputParcel () . ALLOTMENT <> "" )) +
+'		left$ ( "SEC " + InputParcel () . SECTION + " " , 999 * int ( InputParcel () . SECTION <> "" ))
+	TempText = "parcel description unknown"
+end if
+
+if InputParcel () . STATUS = "P" then
+	TempText = TempText + "  (proposed)"
+end if
+
+if CrefNoEditMode then
+	if InputParcel () . CREFNO = "" then
+		TempText = TempText + "  (no crefno)"
+	else
+		TempText = TempText + "  (crefno: " + InputParcel () . CREFNO + ")"
+	end if
+end if
+
+ParcelSummary = TempText
+
+end function
+
+
+
+'================================================================================
+sub LaunchAddressDialog
+'================================================================================
+
+ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
+ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
+
+redim AddressDialogValues ( 1 )
+call AddressDialog
+
+if CommandInfo(CMD_INFO_DLG_OK) then
+
+	alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( AddressDialogValues ( 1 ) )
+
+	UserInteractedWithAddress = TRUE
+	
+	do case AddressDialogPrimaryValue
+		case 1 AddressDialogValues ( 1 ) . PRIMARY = "Y"
+		case 2 AddressDialogValues ( 1 ) . PRIMARY = "N"
+	end case
+	
+	if AddressDialogDistRelTickbox then
+
+'if AddressDialogValues ( 1 ) . HOUSE_NUMBER_1 in ( "" , "0" ) then
+'	note "Address is marked as distance-related...
+'end if
+
+		AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = "Y"
+		AddressDialogValues ( 1 ) . OUTSIDE_PROPERTY = "N"
+
+		do case AddressDialogPositionValue
+			case 0 note "Invalid address position."  'this is here to test if this value is ever 0
+
+	'---- Scenario 1: Use Vicmap Address coordinates of existing property number
+			case 1
+'				if ActionPropNumValue = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum then
+					AddressDialogValues ( 1 ) . EASTING = round ( val ( VicmapAddressDetails ( 1 ) . EASTING ) , 1 )
+					AddressDialogValues ( 1 ) . NORTHING = round ( val ( VicmapAddressDetails ( 1 ) . NORTHING ) , 1 )
+					AddressDialogValues ( 1 ) . DATUM_PROJ = VicmapAddressDetails ( 1 ) . DATUM_PROJ
+'				else
+'					if ubound ( ActionVicmapAddressDetails ) = 0 then
+'						note "Common Ground Code 99." + chr$(13) + chr$(13) + "Please check Edit Summary upon completing this edit" + chr$(13) + "to confirm address details." + chr$(13) + chr$(13) + "Notify Groundtruth if this error is affecting your edits."
+'					else
+
+	'---- Scenario 2: Use Vicmap Address coordinates of user-entered property number
+'						AddressDialogValues ( 1 ) . EASTING = round ( val ( ActionVicmapAddressDetails ( 1 ) . EASTING ) , 1 )
+'						AddressDialogValues ( 1 ) . NORTHING = round ( val ( ActionVicmapAddressDetails ( 1 ) . NORTHING ) , 1 )
+'						AddressDialogValues ( 1 ) . DATUM_PROJ = ActionVicmapAddressDetails ( 1 ) . DATUM_PROJ
+'					end if
+'				end if
+	'---- Scenario 3: Use click position coordinates
+			case 2
+				AddressDialogValues ( 1 ) . EASTING = round ( M1X , 1 )
+				AddressDialogValues ( 1 ) . NORTHING = round ( M1Y , 1 )
+				AddressDialogValues ( 1 ) . DATUM_PROJ = ActiveCoordSys
+		end case
+
+	else
+		AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = "N"
+
+	end if
+
+else
+
+	'---- null out any values from Address Dialog
+	redim AddressDialogValues ( 0 )
+	AddressDialogPrimaryValue = 0
+	AddressDialogDistRelTickbox = FALSE
+	AddressDialogPositionValue = 0
+	
+	alter control ACTION_ADDRESS_POPUP value ADDRESS_NO_ACTION
+	ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
+	if ubound ( ActionVicmapAddressDetails ) <> 0 then
+		alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
+	end if
+
+end if
+
+end sub
+
+
+
+'================================================================================
+function ParcelAutoSPI ( InputParcel () as ParcelCaptureForm ) as string
+'================================================================================
+
+ParcelAutoSPI =
+	LOT_NUMBER +
+	left$ ( ALLOTMENT , 99 * int ( LOT_NUMBER = "" ) ) +
+	left$ ( "~" + SECTION , 99 * int ( SECTION <> "" and left$ ( PLAN_NUMBER , 2 ) not in ( "PC" , "PS" , "TP" ) ) ) +
+	left$ ( "\" , 99 * int ( LOT_NUMBER <> "" or ALLOTMENT <> "" ) ) +
+	PLAN_NUMBER +
+	left$ ( "PP" + PARISH_CODE , 99 * int ( PARISH_CODE <> "" and TOWNSHIP_CODE in ("","9999") and PLAN_NUMBER = "") ) +
+	left$ ( "PP" + TOWNSHIP_CODE , 99 * int ( TOWNSHIP_CODE not in ( "" , "9999" ) ) )
+
+end function
+
+
+
+'================================================================================
+function AddressSummary ( InputAddress () as AddressCaptureForm ) as string
+'================================================================================
+
+AddressSummary = ucase$ (
+	ltrim$ ( rtrim$ (
+	left$ ( InputAddress () . SU_NO_1 , 999 * int ( InputAddress () . SU_NO_1 not in ( "" , "0" ) ) ) +
+	left$ ( "-" + InputAddress () . SU_NO_2 , 999 * int ( InputAddress () . SU_NO_2 not in ( "" , "0" ) ) ) +
+	left$ ( "/", 999 * int ( InputAddress () . SU_NO_1 not in ( "" , "0" ) ) ) +
+	InputAddress () . HOUSE_PREFIX_1 + 
+	left$ ( InputAddress () . HOUSE_NUMBER_1 , 999 * int ( InputAddress () . HOUSE_NUMBER_1 not in ( "" , "0" ) ) ) +
+	InputAddress () . HOUSE_SUFFIX_1 +
+	left$ ( "-" , 999 * int ( InputAddress () . HOUSE_NUMBER_2 not in ( "" , "0" ) ) ) +
+	InputAddress () . HOUSE_PREFIX_2 + 
+	left$ ( InputAddress () . HOUSE_NUMBER_2 , 999 * int ( InputAddress () . HOUSE_NUMBER_2 not in ( "" , "0" ) ) ) +
+	InputAddress () . HOUSE_SUFFIX_2 +
+	" " +
+	InputAddress () . STREET_NAME +
+	rtrim$ ( " " + InputAddress () . STREET_TYPE ) +
+	rtrim$ ( " " + InputAddress () . STREET_SUFFIX ) +
+	left$ ( ", " + InputAddress () . LOCALITY , 999 * int ( InputAddress () . LOCALITY not in ( "" , "0" ) ) ) ) ) )
+
+end function
+
+
+
+'================================================================================
+sub PopulateVicmapParcelDetails
+'================================================================================
+
+dim NumParcels as smallint
+dim i as smallint
+
+dim ParcelMPObj as alias
+dim ParcelMPStatus as alias
+dim ParcelMPPlanNum as alias
+dim ParcelMPLotNum as alias
+
+ParcelMPObj = VicmapParcelTable + ".obj"
+ParcelMPStatus = VicmapParcelTable + ".PARCEL_STATUS"
+ParcelMPPlanNum = VicmapParcelTable + ".PARCEL_PLAN_NUMBER"
+ParcelMPLotNum = VicmapParcelTable + ".PARCEL_LOT_NUMBER"
+
+select
+			PARCEL_PFI,
+			PARCEL_CREFNO,
+			PARCEL_SPI,
+			PARCEL_PART,
+			PARCEL_PLAN_NUMBER,
+			PARCEL_LOT_NUMBER,
+			PARCEL_ALLOTMENT,
+			PARCEL_SEC,
+			PARCEL_BLOCK,
+			PARCEL_PORTION,
+			PARCEL_SUBDIVISION,
+			PARCEL_PARISH_CODE,
+			PARCEL_TOWNSHIP_CODE,
+			PARCEL_STATUS,
+			int(val(PARCEL_LOT_NUMBER)=0)*9999 + val(PARCEL_LOT_NUMBER) "PARCEL_LOT_NUMBER_VAL"
+	from	TempPoint, VicmapParcelTable
+	where	TempPoint.obj within ParcelMPObj
+	order by ParcelMPStatus desc, ParcelMPPlanNum, PARCEL_LOT_NUMBER_VAL
+	into	ParcelQuery noselect
+
+NumParcels = TableInfo ( ParcelQuery , TAB_INFO_NROWS )
+redim VicmapParcelDetails ( NumParcels )
+redim ParcelDescPicklistArray ( NumParcels )
+
+fetch first from ParcelQuery
+
+for i = 1 to NumParcels
+
+	VicmapParcelDetails ( i ) . PARCEL_PFI = ParcelQuery . PARCEL_PFI
+	VicmapParcelDetails ( i ) . CREFNO = ParcelQuery . PARCEL_CREFNO
+	VicmapParcelDetails ( i ) . SPI = ParcelQuery . PARCEL_SPI
+	VicmapParcelDetails ( i ) . PART = ParcelQuery . PARCEL_PART
+	VicmapParcelDetails ( i ) . PLAN_NUMBER = ParcelQuery . PARCEL_PLAN_NUMBER
+	VicmapParcelDetails ( i ) . LOT_NUMBER = ParcelQuery . PARCEL_LOT_NUMBER
+	VicmapParcelDetails ( i ) . ALLOTMENT = ParcelQuery . PARCEL_ALLOTMENT
+	VicmapParcelDetails ( i ) . SECTION = ParcelQuery . PARCEL_SEC
+	VicmapParcelDetails ( i ) . BLOCK = ParcelQuery . PARCEL_BLOCK
+	VicmapParcelDetails ( i ) . PORTION = ParcelQuery . PARCEL_PORTION
+	VicmapParcelDetails ( i ) . SUBDIVISION = ParcelQuery . PARCEL_SUBDIVISION
+	VicmapParcelDetails ( i ) . PARISH_CODE = ParcelQuery . PARCEL_PARISH_CODE
+	VicmapParcelDetails ( i ) . TOWNSHIP_CODE = ParcelQuery . PARCEL_TOWNSHIP_CODE
+	VicmapParcelDetails ( i ) . STATUS = ParcelQuery . PARCEL_STATUS
+
+	ParcelDescPicklistArray ( i ) = ParcelSummary ( VicmapParcelDetails ( i ) )
+
+	if i < NumParcels then fetch next from ParcelQuery end if
+next
+
+close table ParcelQuery
+
+end sub
+
+
+
+'================================================================================
+sub PopulateVicmapPropertyDetails ( byval ParcelPFIValue as string )
+'================================================================================
+
+dim NumProperties as smallint
+dim i as smallint
+
+dim ParcelPropertyParcelPFI as alias
+dim ParcelPropertyPropertyPFI as alias
+dim PropertyPropertyPFI as alias
+'dim PropertyMPType as alias
+dim PropertyStatus as alias
+dim PropertyViewFeatureType as alias
+dim PropertyObject as alias
+dim TempPointObject as alias
+
+ParcelPropertyParcelPFI = VicmapParcelPropertyTable + ".PARCEL_PFI"
+ParcelPropertyPropertyPFI = VicmapParcelPropertyTable + ".PROPERTY_PFI"
+PropertyPropertyPFI = VicmapPropertyTable + ".PROP_PFI"
+PropertyStatus = VicmapPropertyTable + ".PROP_STATUS"
+PropertyViewFeatureType = VicmapPropertyTable + ".PROPV_FEATURE_TYPE"
+PropertyObject = VicmapPropertyTable + ".obj"
+TempPointObject = TempPoint + ".obj"
+
+do case BasePropEditMode
+	case TRUE
+		select
+					PROP_PFI,
+					PROP_PROPNUM,
+					PROP_MULTI_ASSESSMENT,
+					PROP_STATUS,
+					PROP_PROPERTY_TYPE,
+					PROPV_FEATURE_TYPE,
+					val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
+			from	VicmapParcelPropertyTable , VicmapPropertyTable, TempPoint
+			where	ParcelPropertyParcelPFI = ParcelPFIValue and
+					ParcelPropertyPropertyPFI = PropertyPropertyPFI and
+					PropertyObject contains TempPointObject
+			order by PropertyStatus desc, PropertyViewFeatureType, PROP_PROPNUM_VAL
+			into	PropertyQuery noselect
+	case FALSE
+		select
+					PROP_PFI,
+					PROP_PROPNUM,
+					PROP_MULTI_ASSESSMENT,
+					PROP_STATUS,
+					PROP_PROPERTY_TYPE,
+					PROPV_FEATURE_TYPE,
+					val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
+			from	VicmapParcelPropertyTable , VicmapPropertyTable, TempPoint
+			where	ParcelPropertyParcelPFI = ParcelPFIValue and
+					ParcelPropertyPropertyPFI = PropertyPropertyPFI and
+					PropertyViewFeatureType not in ( "27723" , "27743" , "5723" , "5743" ) and 
+					PropertyObject contains TempPointObject
+			order by PROP_PROPNUM_VAL
+			into	PropertyQuery noselect
+end case
+
+NumProperties = TableInfo ( PropertyQuery , TAB_INFO_NROWS )
+redim VicmapPropertyDetails ( NumProperties )
+redim PropDescPicklistArray ( NumProperties )
+
+fetch first from PropertyQuery
+
+for i = 1 to NumProperties
+
+	VicmapPropertyDetails ( i ) . PROPERTY_PFI = PropertyQuery . PROP_PFI
+	VicmapPropertyDetails ( i ) . PROPNUM = PropertyQuery . PROP_PROPNUM
+	VicmapPropertyDetails ( i ) . MULTI_ASSESS = PropertyQuery . PROP_MULTI_ASSESSMENT
+	VicmapPropertyDetails ( i ) . STATUS = PropertyQuery . PROP_STATUS
+	VicmapPropertyDetails ( i ) . PROPERTY_TYPE = PropertyQuery . PROP_PROPERTY_TYPE
+	VicmapPropertyDetails ( i ) . VIEW_FEATURE_TYPE = PropertyQuery . PROPV_FEATURE_TYPE
+	VicmapPropertyDetails ( i ) . NumParcels = NumParcelsInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
+	VicmapPropertyDetails ( i ) . NumPendingM1s = NumPendingM1sInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
+
+	do case VicmapPropertyDetails ( i ) . PROPNUM
+		case ""		PropDescPicklistArray ( i ) = "(no property number)"
+		case else	PropDescPicklistArray ( i ) = VicmapPropertyDetails ( i ) . PROPNUM
+	end case
+
+	if VicmapPropertyDetails ( i ) . VIEW_FEATURE_TYPE in ( "27723" , "27743" , "5723" , "5743" ) then
+		PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + " (base)"
+	end if
+
+	'if VicmapPropertyDetails ( i ) . STATUS = "P" then
+	'	PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + " (proposed)"
+	'end if
+
+	if i < NumProperties then fetch next from PropertyQuery end if
+
+next
+
+close table PropertyQuery
+
+end sub
+
+
+
+'================================================================================
+sub PopulateVicmapAddressDetails ( byval PropertyPFIValue as string )
+'================================================================================
+
+dim NumAddresses as smallint
+dim i as smallint
+
+dim RoadLocalityPFIValue as string
+dim RoadPFIValue as string
+dim LocalityPFIValue as string
+
+dim AddressPropPFI as alias
+dim AddressIsPrimary as alias
+
+AddressPropPFI = VicmapAddressTable + ".PROPERTY_PFI"
+AddressIsPrimary = VicmapAddressTable + ".IS_PRIMARY"
+
+select *
+	from	VicmapAddressTable
+	where	AddressPropPFI = PropertyPFIValue
+	order by AddressIsPrimary desc
+	into	AddressQuery noselect
+
+NumAddresses = TableInfo ( AddressQuery , TAB_INFO_NROWS )
+
+if NumAddresses > 0 then
+	redim VicmapAddressDetails ( NumAddresses )
+	redim AddressDescPicklistArray ( NumAddresses )
+else
+	'---- Vicmap Address does not have address records for every property
+	'---- so we need to add a dummy record to the address arrays
+	redim VicmapAddressDetails ( 1 )
+	redim AddressDescPicklistArray ( 1 )
+end if
+
+fetch first from AddressQuery
+
+for i = 1 to ubound ( VicmapAddressDetails )
+
+	VicmapAddressDetails ( i ) . PFI = AddressQuery . PFI
+
+	if FieldExists ( AddressQuery , "BLG_UNIT_TYPE" ) then
+		'**** New Format Vicmap Address
+		VicmapAddressDetails ( i ) . SU_TYPE = AddressQuery . BLG_UNIT_TYPE
+	end if
+	
+	if FieldExists ( AddressQuery , "PREMISES_TYPE" ) then
+		'**** Old Format Vicmap Address
+		VicmapAddressDetails ( i ) . SU_TYPE = AddressQuery . PREMISES_TYPE
+	end if
+
+	VicmapAddressDetails ( i ) . SU_PREFIX_1 = AddressQuery . BLG_UNIT_PREFIX_1
+	VicmapAddressDetails ( i ) . SU_NO_1 = AddressQuery . BLG_UNIT_ID_1
+	VicmapAddressDetails ( i ) . SU_SUFF_1 = AddressQuery . BLG_UNIT_SUFFIX_1
+	VicmapAddressDetails ( i ) . SU_PREFIX_2 = AddressQuery . BLG_UNIT_PREFIX_2
+	VicmapAddressDetails ( i ) . SU_NO_2 = AddressQuery . BLG_UNIT_ID_2
+	VicmapAddressDetails ( i ) . SU_SUFF_2 = AddressQuery . BLG_UNIT_SUFFIX_2
+	VicmapAddressDetails ( i ) . FL_TYPE = AddressQuery . FLOOR_TYPE
+	VicmapAddressDetails ( i ) . FL_PREFIX_1 = AddressQuery . FLOOR_PREFIX_1
+	VicmapAddressDetails ( i ) . FL_NO_1 = AddressQuery . FLOOR_NO_1
+	VicmapAddressDetails ( i ) . FL_SUFF_1 = AddressQuery . FLOOR_SUFFIX_1
+	VicmapAddressDetails ( i ) . FL_PREFIX_2 = AddressQuery . FLOOR_PREFIX_2
+	VicmapAddressDetails ( i ) . FL_NO_2 = AddressQuery . FLOOR_NO_2
+	VicmapAddressDetails ( i ) . FL_SUFF_2 = AddressQuery . FLOOR_SUFFIX_2
+	VicmapAddressDetails ( i ) . PR_NAME_1 = AddressQuery . BUILDING_NAME
+	VicmapAddressDetails ( i ) . PR_NAME_2 = AddressQuery . COMPLEX_NAME
+	VicmapAddressDetails ( i ) . LOC_DES = AddressQuery . LOCATION_DESCRIPTOR
+	VicmapAddressDetails ( i ) . HOUSE_PREFIX_1 = AddressQuery . HOUSE_PREFIX_1
+	VicmapAddressDetails ( i ) . HOUSE_NUMBER_1 = AddressQuery . HOUSE_NUMBER_1
+	VicmapAddressDetails ( i ) . HOUSE_SUFFIX_1 = AddressQuery . HOUSE_SUFFIX_1
+	VicmapAddressDetails ( i ) . HOUSE_PREFIX_2 = AddressQuery . HOUSE_PREFIX_2
+	VicmapAddressDetails ( i ) . HOUSE_NUMBER_2 = AddressQuery . HOUSE_NUMBER_2
+	VicmapAddressDetails ( i ) . HOUSE_SUFFIX_2 = AddressQuery . HOUSE_SUFFIX_2
+	VicmapAddressDetails ( i ) . DISPLAY_PREFIX_1 = AddressQuery . DISP_PREFIX_1
+	VicmapAddressDetails ( i ) . DISPLAY_NO_1 = AddressQuery . DISP_NUMBER_1
+	VicmapAddressDetails ( i ) . DISPLAY_SUFFIX_1 = AddressQuery . DISP_SUFFIX_1
+	VicmapAddressDetails ( i ) . DISPLAY_PREFIX_2 = AddressQuery . DISP_PREFIX_2
+	VicmapAddressDetails ( i ) . DISPLAY_NO_2 = AddressQuery . DISP_NUMBER_2
+	VicmapAddressDetails ( i ) . DISPLAY_SUFFIX_2 = AddressQuery . DISP_SUFFIX_2
+	VicmapAddressDetails ( i ) . POSTCODE = AddressQuery . POSTCODE
+	VicmapAddressDetails ( i ) . DIST_RELATED_FLAG = AddressQuery . DISTANCE_RELATED_FLAG
+	VicmapAddressDetails ( i ) . PRIMARY = AddressQuery . IS_PRIMARY
+	VicmapAddressDetails ( i ) . EASTING = CentroidX ( AddressQuery . obj )
+	VicmapAddressDetails ( i ) . NORTHING = CentroidY ( AddressQuery . obj )
+	VicmapAddressDetails ( i ) . DATUM_PROJ = TableInfo ( AddressQuery , TAB_INFO_COORDSYS_NAME )
+	VicmapAddressDetails ( i ) . OUTSIDE_PROPERTY = AddressQuery . OUTSIDE_PROPERTY
+
+	if FieldExists ( AddressQuery , "ROAD_NAME" ) then
+		'**** New Format Vicmap Address
+		VicmapAddressDetails ( i ) . STREET_NAME = AddressQuery . ROAD_NAME
+		VicmapAddressDetails ( i ) . STREET_TYPE = AddressQuery . ROAD_TYPE
+		VicmapAddressDetails ( i ) . STREET_SUFFIX = AddressQuery . ROAD_SUFFIX
+	else
+		'**** Old Format Vicmap Address
+		VicmapAddressDetails ( i ) . STREET_NAME = AddressQuery . STREET_NAME
+		VicmapAddressDetails ( i ) . STREET_TYPE = AddressQuery . STREET_TYPE
+		VicmapAddressDetails ( i ) . STREET_SUFFIX = AddressQuery . STREET_SUFFIX
+	end if
+
+	VicmapAddressDetails ( i ) . LOCALITY = AddressQuery . LOCALITY_NAME
+	VicmapAddressDetails ( i ) . POSTCODE = AddressQuery . POSTCODE
+
+	AddressDescPicklistArray ( i ) = AddressSummary ( VicmapAddressDetails ( i ) )
+
+	if VicmapAddressDetails ( i ) . DIST_RELATED_FLAG = "Y" then
+		AddressDescPicklistArray ( i ) = AddressDescPicklistArray ( i ) + " (dist-rel)"
+	end if
+
+	if VicmapAddressDetails ( i ) . PRIMARY = "N" then
+		AddressDescPicklistArray ( i ) = AddressDescPicklistArray ( i ) + " (secondary)"
+	end if
+
+	if AddressDescPicklistArray ( i ) = "" then
+		AddressDescPicklistArray ( i ) = "(no address)"
+	end if
+
+	if i < NumAddresses then fetch next from AddressQuery end if
+
+next
+
+close table AddressQuery
+
+end sub
+
+
+
+'================================================================================
+function NumParcelsInProperty ( byval PropertyPFIValue as string ) as integer
+'================================================================================
+if not IsTableOpen ( VicmapParcelPropertyTable ) then
+	open table VicmapParcelPropertyTablePath readonly
+	VicmapParcelPropertyTable = TableInfo ( 0 , 1 )
+end if
+select *
+	from	VicmapParcelPropertyTable
+	where	PROPERTY_PFI = PropertyPFIValue
+	into 	NumParcelsQuery noselect
+NumParcelsInProperty = TableInfo ( NumParcelsQuery , TAB_INFO_NROWS )
+close table NumParcelsQuery
+end function
+
+
+
+'================================================================================
+function NumPendingM1sInProperty ( byval PropertyPFIValue as string ) as integer
+'================================================================================
+select *
+	from M1Table
+	where Property_PFI = PropertyPFIValue and
+		M1Status = "Recorded"
+	into NumPendingM1sQuery noselect
+NumPendingM1sInProperty = TableInfo ( NumPendingM1sQuery , TAB_INFO_NROWS )
+close table NumPendingM1sQuery
+end function
+
+
+
+

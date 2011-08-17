@@ -1,0 +1,10 @@
+[Link]
+Application = Common Ground.MBX
+Module = Common Ground.MBO
+Module = Common Ground Property Dialog.MBO
+Module = Common Ground Address Dialog.MBO
+Module = Common Ground Tools.MBO
+Module = Common Ground Audits.MBO
+Module = Common Ground Verification.MBO
+Module = Common Ground Runtime Menu.MBO
+Module = dir32.MBO

@@ -1,0 +1,77 @@
+include "Common Ground.DEF"
+
+
+'================================================================================
+sub EditVerification
+'================================================================================
+	
+dim i as integer
+dim M1EditCode as alias
+dim M1StreetName as alias
+
+dim AddressDetailsUpdated as logical
+dim PropertyDetailsUpdated as logical
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+M1EditCode = M1Table + ".edit_code"
+M1StreetName = M1Table + ".street_name"
+
+for i = 1 to TableInfo ( M1Table , TAB_INFO_NROWS )
+
+	fetch next from M1Table
+
+	'---- check property details
+	if M1EditCode in ( "A" , "E" , "P" , "R" , "T" ) then
+		' if Vicmap contains the PFI from the M1 then
+		'     if M1 PropNum = Vicmap PropNum then
+		'         say PropertyDetailsUpdated = T
+		'     end if
+		' else
+		'     if M1EditCode = "R" or if M1 point is within a property that contains the new property number then
+		'         say PropertyDetailsUpdated = T
+		'     end if
+		' end if
+	end if
+
+	'---- check address details
+	if M1EditCode in ( "A" , "E" , "S" , "T" , "Z" ) then
+		' check address
+		' if OK, say AddressDetailsUpdated = T
+	end if
+
+	'---- update M1 status
+	do case M1EditCode
+		case "E"
+			if AddressDetailsUpdated and PropertyDetailsUpdated then
+				'change status to 'Verified'
+			end if
+		case "P","R"
+			if PropertyDetailsUpdated then
+				'change status to 'Verified'
+			end if
+		case "S"
+			if AddressDetailsUpdated then
+				'change status to 'Verified'
+			end if
+		case "A","T"
+			if M1StreetName <> "" then
+				if AddressDetailsUpdated and PropertyDetailsUpdated then
+					'change status to 'Verified'
+				end if
+			else
+					if PropertyDetailsUpdated then
+						'change status to 'Verified'
+					end if
+			end if
+	end case
+
+	'---- exit loop if at the end of the table
+	if EOT(M1Table) then exit for end if
+
+next
+
+
+end sub

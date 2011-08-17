@@ -1,0 +1,1495 @@
+
+include "Common Ground.DEF"
+
+
+'================================================================================
+sub AddLayerToMap ( byval TableName as string , byval ViewPreference as smallint )
+'================================================================================
+
+dim LayerName as string
+
+if TableName like "%\%" then
+	open table TableName
+	LayerName = TableInfo ( 0 , 1 )
+else
+	LayerName = TableName
+end if
+
+if IsMapWindowOpen() then
+	set map redraw off
+	add map auto layer LayerName
+else
+	map from LayerName
+	set window CurrentMapWindow
+		position (0,0)
+		title "Common Ground Map"
+		scrollbars on
+		width WindowInfo ( CurrentMapWindow, WIN_INFO_WIDTH ) * 1.5
+		height WindowInfo ( CurrentMapWindow, WIN_INFO_HEIGHT ) * 1.5
+	set map redraw off
+end if
+
+do case ViewPreference
+
+	case LAYERSHOW
+		do case LayerName
+			case VicmapAddressTable
+				set map Layer LayerName
+					Display Global
+				    Global Pen (1,2,0)  Brush (1,16777215,16777215)  Symbol (31,0,12)  Line (1,2,0)  Font ("Arial",0,8,0)
+				    Zoom (0, 25) Units "km"
+				    Label Position Center Font ("Arial",257,9,255,16777215) Pen (1,2,0)
+				    	'With Left$(BLG_UNIT_ID_1+"/", 99*Int(BLG_UNIT_ID_1 <> all("", "0")))+HOUSE_PREFIX_1+HOUSE_NUMBER_1+HOUSE_SUFFIX_1+Left$("-"+HOUSE_NUMBER_2, 99*Int(HOUSE_NUMBER_2 <> all("", "0")))
+				    	'With Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1)
+				    	'With Left$( Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1) , 99*int(HOUSE_NUMBER_1<>""))
+						'updated 2007-04-13 - this can be simplified once Common Ground is made to change the house number field to character
+				    	With Left$(Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1), 99*Int(Str$(HOUSE_NUMBER_1) <> all("", "0")))
+				    	Auto On Overlap On Duplicates On PartialSegments On Max 96 Visibility Zoom (0, 25) Units "km"
+				    	Visibility On
+			case VicmapPropertyTable
+				Set Map Layer LayerName
+					Display Global
+					Global Pen (1,2,0)  Global Brush (1,16777215,16777215)
+					Label With PROP_PROPNUM
+			case VicmapParcelTable
+				Set Map Layer LayerName
+					Display Global
+					Global Pen (1,2,12632256)  Global Brush (1,0,16777215)
+					Label Font ("Arial",257,8,12632256,16777215)
+						With Left$(PARCEL_SPI, InStr(1, PARCEL_SPI, "\")-1)+Chr$(13)+Mid$(PARCEL_SPI, InStr(1, PARCEL_SPI, "\")+1, 99)
+						Auto On PartialSegments On Overlap Off Max 64 Visibility Zoom (0, 10) Units "km"
+				    	Visibility On
+			case VicmapParcelTable + "_proposed"
+				Set Map Layer LayerName
+					Display Global
+					Selectable Off
+					Global Line (1,2,0) Global Pen (2,9,16711935) Global Brush (1,16777215,16777215)
+					Label Font ("Arial",257,8,16711935,16777215) Pen (1,2,0)
+						With Left$(PARCEL_SPI, InStr(1, PARCEL_SPI, "\")-1)+Chr$(13)+Mid$(PARCEL_SPI, InStr(1, PARCEL_SPI, "\")+1, 99)
+						Auto On PartialSegments On Overlap On Max 32 Visibility Zoom (0, 10) Units "km"
+				    	Visibility On
+			case VicmapParcelTable + "_multi_lot"
+				Set Map Layer LayerName
+					Display Global
+					Selectable Off
+					Global Line (1,2,0) Global Pen (1,1,16744448) Global Brush (6,65280)
+			case VicmapPropertyTable + "_multi_ass"
+				Set Map Layer LayerName
+					Display Global
+					Selectable Off
+					Global Line (1,2,0) Global Pen (1,1,16744448) Global Brush (5,16756832)
+		end case
+
+	case LAYERHIDE
+		set map layer LayerName
+			Selectable Off
+
+		do case LayerName
+			case VicmapPropertyTable, VicmapParcelTable
+				Set Map Layer LayerName
+					Display Global
+					Global Pen (1,1,0) Global Brush (1,16777215,16777215)
+		end case
+
+end case
+
+set map redraw on
+
+end sub
+
+
+
+'================================================================================
+function IsThisWindowOpen ( byval WindowID as integer ) as logical
+'================================================================================
+
+dim WindowName as string
+
+onerror goto Err
+
+WindowName = WindowInfo ( WindowID , WIN_INFO_NAME )
+IsThisWindowOpen = TRUE
+
+exit function
+
+Err:
+
+end function
+
+
+
+'================================================================================
+function INIValue ( byval SectionName as string , byval KeyName as string ) as string
+'================================================================================
+
+dim ValueReturned as string
+dim ReadArgument as smallint
+dim INIFile as string
+
+onerror goto HandleError
+
+INIFile = ApplicationDirectory$() & "Common Ground.INI"
+
+ValueReturned = string$(255,"X")
+ReadArgument = GetPrivateProfileString32(SectionName, KeyName, "?", ValueReturned, len(ValueReturned), INIFile)
+INIValue = ValueReturned
+
+exit sub
+HandleError:
+   print " " + Error$()
+   resume next
+
+end function
+
+
+
+'================================================================================
+function AutoSpreadsheetName ( byval FolderName as string , byval CouncilLabel as string , byval UserName as string ) as string
+'================================================================================
+
+dim FileList() as string
+dim NumFiles as integer
+dim i as integer
+dim ThisFileNum as integer
+dim LatestFileNum as integer
+
+call GetFiles ( FolderName , "*.xls", FileList )
+NumFiles = ubound ( FileList )
+
+for i = 1 to NumFiles
+	if FileList(i) like "#%" then
+		ThisFileNum = val ( mid$ ( FileList(i) , 2 , 3 ) )
+		if ThisFileNum > LatestFileNum then
+			LatestFileNum = ThisFileNum
+		end if
+	end if	
+next
+
+if CouncilLabel like "M1%" then
+	CouncilLabel = ltrim$ ( mid$ ( CouncilLabel , 3 , 99 ) )
+end if
+
+if CouncilLabel like "%M1" then
+	CouncilLabel = rtrim$ ( left$ ( CouncilLabel , len ( CouncilLabel ) - 2 ) )
+end if
+
+'find and replace spaces with underscores
+CouncilLabel = FindAndReplaceTextRecursive ( CouncilLabel , " " , "_" )
+
+if UserName <> "" then
+	UserName = UserName + "_"
+end if
+
+AutoSpreadsheetName =
+	"#" + Format$ ( LatestFileNum + 1 , "000" ) + "_" +
+	CouncilLabel +
+	"_M1_" +
+	Year ( CurDate () ) + "-" + Format$ ( Month ( CurDate () ) , "00" ) + "-" + Format$ ( Day ( CurDate () ) , "00" ) + "_" +
+	UserName +
+	"old" +
+	".xls"
+
+end function
+
+
+
+'================================================================================
+function AutoEditCode (
+	byval TargetPropertyMulti as string ,
+	byval TargetAddressPrimary as string ,
+	byval TargetAddressDistRel as string ,
+	byval TargetExtent as integer ,
+	byval ActionPropNum as integer ,
+	byval ActionAddress as integer ,
+	byval ActionCrefNo as integer ) as string
+'================================================================================
+
+dim CodeValue as string
+
+'---- EDIT CODE 'A'    Add a Multi Assessment property
+if ActionPropNum = PROPNUM_ADD then
+	CodeValue = "A"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'R'    Retire a Multi Assessment property
+if TargetPropertyMulti = "Y" and ActionPropNum = PROPNUM_REMOVE then
+	CodeValue = "R"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'T'    Transfer a parcel out of a multi-parcel property
+'if TargetExtent = EXTENT_THIS_PARCEL and ActionPropNum = PROPNUM_MODIFY then
+if TargetExtent = EXTENT_THIS_PARCEL and ActionPropNum in ( PROPNUM_MODIFY , PROPNUM_REMOVE ) then
+	CodeValue = "T"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'E'    Update Everything
+if ActionAddress = ADDRESS_MODIFY and ( ActionPropNum = PROPNUM_MODIFY or ActionCrefNo = CREFNO_MODIFY ) then
+	CodeValue = "E"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'P'    Update Council Property and Parcel Details
+if ActionAddress = ADDRESS_NO_ACTION and ( ActionPropNum = PROPNUM_MODIFY or ActionPropNum = PROPNUM_REMOVE or ActionCrefNo in ( CREFNO_MODIFY , CREFNO_REMOVE ) ) then
+	CodeValue = "P"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'Z'    Retire a Rural (or Urban Secondary) Address
+if ActionAddress = ADDRESS_REMOVE and ( TargetAddressDistRel = "Y" or TargetAddressPrimary = "N" ) then
+	CodeValue = "Z"
+	goto FinalVerdict
+end if  	
+
+'---- EDIT CODE 'S'    Update Address Details
+'if ( ActionAddress = ADDRESS_MODIFY and ( ActionPropNum = PROPNUM_NO_ACTION or TargetAddressDistRel = "Y" or TargetAddressPrimary = "N" ) ) or
+if ( ActionAddress in (ADDRESS_MODIFY,ADDRESS_ADD) and ( ActionPropNum = PROPNUM_NO_ACTION or TargetAddressDistRel = "Y" or TargetAddressPrimary = "N" ) ) or
+	( ActionPropNum = PROPNUM_ADD ) or 
+	( ActionAddress = ADDRESS_REMOVE and TargetAddressPrimary = "Y" ) then
+	CodeValue = "S"
+	goto FinalVerdict
+end if
+
+FinalVerdict:
+AutoEditCode = CodeValue
+
+end function
+
+
+
+'================================================================================
+function IsAdditionalZapRecordRequired (
+	byval CurrentEditCode as string ,
+	byval TargetParcelPFI as string ,
+	byval TargetAddressPFI as string ,
+	byval TargetAddressPrimary as string ,
+	byval TargetAddressDistRel as string ,
+	byval ActionAddress as integer ) as logical
+'================================================================================
+
+dim Check1 as logical
+dim Check2 as logical
+
+dim ParcelObject as alias
+dim AddressObject as alias
+
+if ActionAddress = ADDRESS_MODIFY and ( TargetAddressPrimary = "N" or TargetAddressDistRel = "Y" ) then
+
+	Check1 = TRUE
+
+	if CurrentEditCode = "T" then
+		ParcelObject = VicmapParcelTable + ".obj"
+		AddressObject = VicmapAddressTable + ".obj"
+		select *
+			from VicmapParcelTable, VicmapAddressTable
+			where PARCEL_PFI = TargetParcelPFI and
+				ParcelObject contains AddressObject and
+				PFI = TargetAddressPFI
+			into TempSelection noselect
+		if TableInfo ( TempSelection , TAB_INFO_NROWS ) > 0 then
+			Check2 = TRUE
+		end if
+		close table TempSelection
+	else
+		Check2 = TRUE
+	end if
+
+end if
+
+
+if Check1 and Check2 then
+	IsAdditionalZapRecordRequired = TRUE
+end if
+
+end function
+
+
+
+'================================================================================
+sub PopulateExtentArray ( byval NumParcels as integer )
+'================================================================================
+
+do case NumParcels
+	case 1
+		redim ExtentPicklistArray ( 1 )
+		ExtentPicklistArray ( 1 ) = "this parcel/property"
+		ExtentMode = 1
+	case else
+		redim ExtentPicklistArray ( 2 )
+		ExtentPicklistArray ( 1 ) = "whole property (" + NumParcels + " parcels)"
+		ExtentPicklistArray ( 2 ) = "this parcel"
+		ExtentMode = 2
+end case
+
+end sub
+
+
+
+'================================================================================
+sub UpdateRecordFromAddressArray ( byval TableName as string , byval RowNum as integer , AddressArray ( ) as AddressCaptureForm )
+'================================================================================
+
+update TableName set SU_TYPE = ucase$ ( AddressArray ( ) . SU_TYPE ) where RowID = RowNum
+update TableName set SU_PREFIX_1 = ucase$ ( AddressArray ( ) . SU_PREFIX_1 ) where RowID = RowNum
+update TableName set SU_NO_1 = ucase$ ( AddressArray ( ) . SU_NO_1 ) where RowID = RowNum
+update TableName set SU_SUFF_1 = ucase$ ( AddressArray ( ) . SU_SUFF_1 ) where RowID = RowNum
+update TableName set SU_PREFIX_2 = ucase$ ( AddressArray ( ) . SU_PREFIX_2 ) where RowID = RowNum
+update TableName set SU_NO_2 = ucase$ ( AddressArray ( ) . SU_NO_2 ) where RowID = RowNum
+update TableName set SU_SUFF_2 = ucase$ ( AddressArray ( ) . SU_SUFF_2 ) where RowID = RowNum
+update TableName set FL_TYPE = ucase$ ( AddressArray ( ) . FL_TYPE ) where RowID = RowNum
+update TableName set FL_PREFIX_1 = ucase$ ( AddressArray ( ) . FL_PREFIX_1 ) where RowID = RowNum
+update TableName set FL_NO_1 = ucase$ ( AddressArray ( ) . FL_NO_1 ) where RowID = RowNum
+update TableName set FL_SUFF_1 = ucase$ ( AddressArray ( ) . FL_SUFF_1 ) where RowID = RowNum
+update TableName set FL_PREFIX_2 = ucase$ ( AddressArray ( ) . FL_PREFIX_2 ) where RowID = RowNum
+update TableName set FL_NO_2 = ucase$ ( AddressArray ( ) . FL_NO_2 ) where RowID = RowNum
+update TableName set FL_SUFF_2 = ucase$ ( AddressArray ( ) . FL_SUFF_2 ) where RowID = RowNum
+update TableName set PR_NAME_1 = ucase$ ( AddressArray ( ) . PR_NAME_1 ) where RowID = RowNum
+update TableName set PR_NAME_2 = ucase$ ( AddressArray ( ) . PR_NAME_2 ) where RowID = RowNum
+update TableName set LOC_DES = ucase$ ( AddressArray ( ) . LOC_DES ) where RowID = RowNum
+update TableName set HOUSE_PREFIX_1 = ucase$ ( AddressArray ( ) . HOUSE_PREFIX_1 ) where RowID = RowNum
+update TableName set HOUSE_NUMBER_1 = ucase$ ( AddressArray ( ) . HOUSE_NUMBER_1 ) where RowID = RowNum
+update TableName set HOUSE_SUFFIX_1 = ucase$ ( AddressArray ( ) . HOUSE_SUFFIX_1 ) where RowID = RowNum
+update TableName set HOUSE_PREFIX_2 = ucase$ ( AddressArray ( ) . HOUSE_PREFIX_2 ) where RowID = RowNum
+update TableName set HOUSE_NUMBER_2 = ucase$ ( AddressArray ( ) . HOUSE_NUMBER_2 ) where RowID = RowNum
+update TableName set HOUSE_SUFFIX_2 = ucase$ ( AddressArray ( ) . HOUSE_SUFFIX_2 ) where RowID = RowNum
+update TableName set DISPLAY_PREFIX_1 = ucase$ ( AddressArray ( ) . DISPLAY_PREFIX_1 ) where RowID = RowNum
+update TableName set DISPLAY_NO_1 = ucase$ ( AddressArray ( ) . DISPLAY_NO_1 ) where RowID = RowNum
+update TableName set DISPLAY_SUFFIX_1 = ucase$ ( AddressArray ( ) . DISPLAY_SUFFIX_1 ) where RowID = RowNum
+update TableName set DISPLAY_PREFIX_2 = ucase$ ( AddressArray ( ) . DISPLAY_PREFIX_2 ) where RowID = RowNum
+update TableName set DISPLAY_NO_2 = ucase$ ( AddressArray ( ) . DISPLAY_NO_2 ) where RowID = RowNum
+update TableName set DISPLAY_SUFFIX_2 = ucase$ ( AddressArray ( ) . DISPLAY_SUFFIX_2 ) where RowID = RowNum
+update TableName set STREET_NAME = ucase$ ( AddressArray ( ) . STREET_NAME ) where RowID = RowNum
+update TableName set STREET_TYPE = ucase$ ( AddressArray ( ) . STREET_TYPE ) where RowID = RowNum
+update TableName set STREET_SUFFIX = ucase$ ( AddressArray ( ) . STREET_SUFFIX ) where RowID = RowNum
+update TableName set LOCALITY = ucase$ ( AddressArray ( ) . LOCALITY ) where RowID = RowNum
+update TableName set POSTCODE = ucase$ ( AddressArray ( ) . POSTCODE ) where RowID = RowNum
+
+update TableName set DIST_RELATED_FLAG = ucase$ ( AddressArray ( ) . DIST_RELATED_FLAG ) where RowID = RowNum
+update TableName set PRIMARY = ucase$ ( AddressArray ( ) . PRIMARY ) where RowID = RowNum
+update TableName set EASTING = ucase$ ( AddressArray ( ) . EASTING ) where RowID = RowNum
+update TableName set NORTHING = ucase$ ( AddressArray ( ) . NORTHING ) where RowID = RowNum
+update TableName set DATUM_PROJ = ucase$ ( AddressArray ( ) . DATUM_PROJ ) where RowID = RowNum
+update TableName set OUTSIDE_PROPERTY = ucase$ ( AddressArray ( ) . OUTSIDE_PROPERTY ) where RowID = RowNum
+
+end sub
+
+
+
+'================================================================================
+sub UpdateAddressArrayFromRecord ( AddressArray () as AddressCaptureForm , byval TableName as string , byval RowNum as integer )
+'================================================================================
+
+dim FieldAlias as alias
+
+onerror goto Err
+
+fetch rec RowNum from TableName
+
+do case TableName
+
+	case RatesAddressQuery
+		FieldAlias = TableName + ".SU_TYPE"
+		AddressArray ( ) . SU_TYPE = FieldAlias
+		FieldAlias = TableName + ".SU_PREFIX_1"
+		AddressArray ( ) . SU_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".SU_NO_1"
+		AddressArray ( ) . SU_NO_1 = FieldAlias
+		FieldAlias = TableName + ".SU_SUFF_1"
+		AddressArray ( ) . SU_SUFF_1 = FieldAlias
+		FieldAlias = TableName + ".SU_PREFIX_2"
+		AddressArray ( ) . SU_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".SU_NO_2"
+		AddressArray ( ) . SU_NO_2 = FieldAlias
+		FieldAlias = TableName + ".SU_SUFF_2"
+		AddressArray ( ) . SU_SUFF_2 = FieldAlias
+		FieldAlias = TableName + ".FL_TYPE"
+		AddressArray ( ) . FL_TYPE = FieldAlias
+		FieldAlias = TableName + ".FL_PREFIX_1"
+		AddressArray ( ) . FL_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".FL_NO_1"
+		AddressArray ( ) . FL_NO_1 = FieldAlias
+		FieldAlias = TableName + ".FL_SUFF_1"
+		AddressArray ( ) . FL_SUFF_1 = FieldAlias
+		FieldAlias = TableName + ".FL_PREFIX_2"
+		AddressArray ( ) . FL_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".FL_NO_2"
+		AddressArray ( ) . FL_NO_2 = FieldAlias
+		FieldAlias = TableName + ".FL_SUFF_2"
+		AddressArray ( ) . FL_SUFF_2 = FieldAlias
+		FieldAlias = TableName + ".PR_NAME_1"
+		AddressArray ( ) . PR_NAME_1 = FieldAlias
+		FieldAlias = TableName + ".PR_NAME_2"
+		AddressArray ( ) . PR_NAME_2 = FieldAlias
+		FieldAlias = TableName + ".LOC_DES"
+		AddressArray ( ) . LOC_DES = FieldAlias
+		FieldAlias = TableName + ".HOUSE_PREFIX_1"
+		AddressArray ( ) . HOUSE_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_NUMBER_1"
+		AddressArray ( ) . HOUSE_NUMBER_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_SUFFIX_1"
+		AddressArray ( ) . HOUSE_SUFFIX_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_PREFIX_2"
+		AddressArray ( ) . HOUSE_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_NUMBER_2"
+		AddressArray ( ) . HOUSE_NUMBER_2 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_SUFFIX_2"
+		AddressArray ( ) . HOUSE_SUFFIX_2 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_PREFIX_1"
+		AddressArray ( ) . DISPLAY_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_NO_1"
+		AddressArray ( ) . DISPLAY_NO_1 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_SUFFIX_1"
+		AddressArray ( ) . DISPLAY_SUFFIX_1 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_PREFIX_2"
+		AddressArray ( ) . DISPLAY_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_NO_2"
+		AddressArray ( ) . DISPLAY_NO_2 = FieldAlias
+		FieldAlias = TableName + ".DISPLAY_SUFFIX_2"
+		AddressArray ( ) . DISPLAY_SUFFIX_2 = FieldAlias
+		FieldAlias = TableName + ".STREET_NAME"
+		AddressArray ( ) . STREET_NAME = FieldAlias
+		FieldAlias = TableName + ".STREET_TYPE"
+		AddressArray ( ) . STREET_TYPE = FieldAlias
+		FieldAlias = TableName + ".STREET_SUFFIX"
+		AddressArray ( ) . STREET_SUFFIX = FieldAlias
+		FieldAlias = TableName + ".LOCALITY"
+		AddressArray ( ) . LOCALITY = FieldAlias
+		FieldAlias = TableName + ".POSTCODE"
+		AddressArray ( ) . POSTCODE = FieldAlias
+		FieldAlias = TableName + ".PRIMARY"
+		AddressArray ( ) . PRIMARY = FieldAlias
+		FieldAlias = TableName + ".DIST_RELATED_FLAG"
+		AddressArray ( ) . DIST_RELATED_FLAG = FieldAlias
+		FieldAlias = TableName + ".OUTSIDE_PROPERTY"
+		AddressArray ( ) . OUTSIDE_PROPERTY = FieldAlias
+
+	case VicmapAddressQuery
+		FieldAlias = TableName + ".BLG_UNIT_TYPE"
+		AddressArray ( ) . SU_TYPE = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_PREFIX_1"
+		AddressArray ( ) . SU_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_ID_1"
+		AddressArray ( ) . SU_NO_1 = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_SUFFIX_1"
+		AddressArray ( ) . SU_SUFF_1 = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_PREFIX_2"
+		AddressArray ( ) . SU_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_ID_2"
+		AddressArray ( ) . SU_NO_2 = FieldAlias
+		FieldAlias = TableName + ".BLG_UNIT_SUFFIX_2"
+		AddressArray ( ) . SU_SUFF_2 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_TYPE"
+		AddressArray ( ) . FL_TYPE = FieldAlias
+		FieldAlias = TableName + ".FLOOR_PREFIX_1"
+		AddressArray ( ) . FL_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_NO_1"
+		AddressArray ( ) . FL_NO_1 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_SUFFIX_1"
+		AddressArray ( ) . FL_SUFF_1 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_PREFIX_2"
+		AddressArray ( ) . FL_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_NO_2"
+		AddressArray ( ) . FL_NO_2 = FieldAlias
+		FieldAlias = TableName + ".FLOOR_SUFFIX_2"
+		AddressArray ( ) . FL_SUFF_2 = FieldAlias
+		FieldAlias = TableName + ".BUILDING_NAME"
+		AddressArray ( ) . PR_NAME_1 = FieldAlias
+		FieldAlias = TableName + ".COMPLEX_NAME"
+		AddressArray ( ) . PR_NAME_2 = FieldAlias
+		FieldAlias = TableName + ".LOCATION_DESCRIPTOR"
+		AddressArray ( ) . LOC_DES = FieldAlias
+		FieldAlias = TableName + ".HOUSE_PREFIX_1"
+		AddressArray ( ) . HOUSE_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_NUMBER_1"
+		AddressArray ( ) . HOUSE_NUMBER_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_SUFFIX_1"
+		AddressArray ( ) . HOUSE_SUFFIX_1 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_PREFIX_2"
+		AddressArray ( ) . HOUSE_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_NUMBER_2"
+		AddressArray ( ) . HOUSE_NUMBER_2 = FieldAlias
+		FieldAlias = TableName + ".HOUSE_SUFFIX_2"
+		AddressArray ( ) . HOUSE_SUFFIX_2 = FieldAlias
+		FieldAlias = TableName + ".DISP_PREFIX_1"
+		AddressArray ( ) . DISPLAY_PREFIX_1 = FieldAlias
+		FieldAlias = TableName + ".DISP_NUMBER_1"
+		AddressArray ( ) . DISPLAY_NO_1 = FieldAlias
+		FieldAlias = TableName + ".DISP_SUFFIX_1"
+		AddressArray ( ) . DISPLAY_SUFFIX_1 = FieldAlias
+		FieldAlias = TableName + ".DISP_PREFIX_2"
+		AddressArray ( ) . DISPLAY_PREFIX_2 = FieldAlias
+		FieldAlias = TableName + ".DISP_NUMBER_2"
+		AddressArray ( ) . DISPLAY_NO_2 = FieldAlias
+		FieldAlias = TableName + ".DISP_SUFFIX_2"
+		AddressArray ( ) . DISPLAY_SUFFIX_2 = FieldAlias
+		FieldAlias = TableName + ".STREET_NAME"
+		AddressArray ( ) . STREET_NAME = FieldAlias
+		FieldAlias = TableName + ".STREET_TYPE"
+		AddressArray ( ) . STREET_TYPE = FieldAlias
+		FieldAlias = TableName + ".STREET_SUFFIX"
+		AddressArray ( ) . STREET_SUFFIX = FieldAlias
+		FieldAlias = TableName + ".LOCALITY_NAME"
+		AddressArray ( ) . LOCALITY = FieldAlias
+		FieldAlias = TableName + ".POSTCODE"
+		AddressArray ( ) . POSTCODE = FieldAlias
+		FieldAlias = TableName + ".IS_PRIMARY"
+		AddressArray ( ) . PRIMARY = FieldAlias
+		FieldAlias = TableName + ".DISTANCE_RELATED_FLAG"
+		AddressArray ( ) . DIST_RELATED_FLAG = FieldAlias
+		FieldAlias = TableName + ".OUTSIDE_PROPERTY"
+		AddressArray ( ) . OUTSIDE_PROPERTY = FieldAlias
+
+end case
+
+exit sub
+
+Err:
+	resume next
+
+end sub
+
+
+
+'================================================================================
+function AddressMatch ( InputAddress1 () as AddressCaptureForm , InputAddress2 () as AddressCaptureForm ) as logical
+'================================================================================
+
+dim MatchStatus as logical
+MatchStatus = TRUE
+
+if left$(InputAddress1().SU_TYPE,1) <> left$(InputAddress2().SU_TYPE,1) then MatchStatus = FALSE end if
+if InputAddress1().SU_PREFIX_1 <> InputAddress2().SU_PREFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().SU_NO_1 <> InputAddress2().SU_NO_1 then MatchStatus = FALSE end if
+if InputAddress1().SU_SUFF_1 <> InputAddress2().SU_SUFF_1 then MatchStatus = FALSE end if
+if InputAddress1().SU_PREFIX_2 <> InputAddress2().SU_PREFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().SU_NO_2 <> InputAddress2().SU_NO_2 then MatchStatus = FALSE end if
+if InputAddress1().SU_SUFF_2 <> InputAddress2().SU_SUFF_2 then MatchStatus = FALSE end if
+if left$(InputAddress1().FL_TYPE,1) <> left$(InputAddress2().FL_TYPE,1) then MatchStatus = FALSE end if
+if InputAddress1().FL_PREFIX_1 <> InputAddress2().FL_PREFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().FL_NO_1 <> InputAddress2().FL_NO_1 then MatchStatus = FALSE end if
+if InputAddress1().FL_SUFF_1 <> InputAddress2().FL_SUFF_1 then MatchStatus = FALSE end if
+if InputAddress1().FL_PREFIX_2 <> InputAddress2().FL_PREFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().FL_NO_2 <> InputAddress2().FL_NO_2 then MatchStatus = FALSE end if
+if InputAddress1().FL_SUFF_2 <> InputAddress2().FL_SUFF_2 then MatchStatus = FALSE end if
+if InputAddress1().PR_NAME_1 <> InputAddress2().PR_NAME_1 then MatchStatus = FALSE end if
+if InputAddress1().PR_NAME_2 <> InputAddress2().PR_NAME_2 then MatchStatus = FALSE end if
+if InputAddress1().LOC_DES <> InputAddress2().LOC_DES then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_PREFIX_1 <> InputAddress2().HOUSE_PREFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_NUMBER_1 <> InputAddress2().HOUSE_NUMBER_1 then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_SUFFIX_1 <> InputAddress2().HOUSE_SUFFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_PREFIX_2 <> InputAddress2().HOUSE_PREFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_NUMBER_2 <> InputAddress2().HOUSE_NUMBER_2 then MatchStatus = FALSE end if
+if InputAddress1().HOUSE_SUFFIX_2 <> InputAddress2().HOUSE_SUFFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_PREFIX_1 <> InputAddress2().DISPLAY_PREFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_NO_1 <> InputAddress2().DISPLAY_NO_1 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_SUFFIX_1 <> InputAddress2().DISPLAY_SUFFIX_1 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_PREFIX_2 <> InputAddress2().DISPLAY_PREFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_NO_2 <> InputAddress2().DISPLAY_NO_2 then MatchStatus = FALSE end if
+if InputAddress1().DISPLAY_SUFFIX_2 <> InputAddress2().DISPLAY_SUFFIX_2 then MatchStatus = FALSE end if
+if InputAddress1().STREET_NAME <> InputAddress2().STREET_NAME then MatchStatus = FALSE end if
+if InputAddress1().STREET_TYPE <> InputAddress2().STREET_TYPE then MatchStatus = FALSE end if
+if InputAddress1().STREET_SUFFIX <> InputAddress2().STREET_SUFFIX then MatchStatus = FALSE end if
+if InputAddress1().LOCALITY <> InputAddress2().LOCALITY and InputAddress2().LOCALITY <> "" then MatchStatus = FALSE end if
+
+'PRIMARY
+'if InputAddress1().PRIMARY = "Y" and not InputAddress2().PRIMARY = "Y" then MatchStatus = FALSE end if
+'if not InputAddress1().PRIMARY = "Y" and InputAddress2().PRIMARY = "Y" then MatchStatus = FALSE end if
+
+AddressMatch = MatchStatus
+
+end function
+
+
+
+'================================================================================
+sub DisplayRecordSummary ( byval TableName as string , byval RowNum as integer )
+'================================================================================
+' this sub assumes that there are no number fields - only character and date
+
+dim i as smallint
+dim CurrentField as alias
+Dim QueryStatement as string
+
+onerror goto Err
+
+QueryStatement = "select "
+
+fetch rec RowNum from TableName
+
+for i = 1 to TableInfo ( TableName , TAB_INFO_NCOLS )
+	CurrentField = TableName + ".COL" + i
+	if str$(CurrentField) not in ( "" ) or ColumnInfo ( TableName , "COL" + i , COL_INFO_NAME ) = "Comments" then
+		QueryStatement = QueryStatement + "COL" + i + ","
+	end if
+next
+
+if QueryStatement = "select " then
+	QueryStatement = "select * "
+end if
+
+QueryStatement = left$ ( QueryStatement , len ( QueryStatement ) - 1 ) + " from " + TableName + " where rowid = " + RowNum + " into EditSummary noselect"
+run command QueryStatement
+
+set window WIN_INFO
+	table EditSummary
+	rec 1
+
+exit sub
+	
+Err:
+	note "Unable to display edit summary." + chr$(13) + "Please contact Groundtruth Mapping Systems."
+
+end sub
+
+
+
+'================================================================================
+sub SearchMap
+'================================================================================
+
+'onerror goto Err
+
+dim UserSelectedSearchMode as smallint
+dim InitialOperator as string
+dim UserEnteredSearchParameter as string
+
+do case LastUserSelectedSearchMode
+	case 0,1,3,4,7 InitialOperator = "  =    "
+	case 2,5,6 InitialOperator = " like "
+end case
+
+StartSearch:
+
+dialog
+	title "Search"
+	control PopUpMenu
+		ID 9876
+		title "Property Number;Property Address;Property PFI;Parcel CrefNo;Parcel Plan Number;Parcel SPI;Parcel PFI"
+		value LastUserSelectedSearchMode
+		into UserSelectedSearchMode
+		calling SearchMapInteractionHandler
+	control StaticText
+		ID 8765
+		title InitialOperator
+	control EditText
+		ID 9991
+		value LastUserEnteredSearchParameter
+		into UserEnteredSearchParameter
+	control OKButton
+	control CancelButton
+
+if not CommandInfo ( CMD_INFO_DLG_OK ) then exit sub end if
+
+LastUserSelectedSearchMode = UserSelectedSearchMode
+LastUserEnteredSearchParameter = UserEnteredSearchParameter
+
+if not TablesOpened then
+	call OpenTables
+end if
+
+do case UserSelectedSearchMode
+	case 1
+		select * from VicmapPropertyTable where PROP_PROPNUM = UserEnteredSearchParameter and PROP_LGA_CODE = LGACode into CommonGroundSearchQuery
+	case 2
+		select PROP_PFI, PROP_PROPNUM, EZI_ADDRESS, IS_PRIMARY, ADDRESS_CLASS, DISTANCE_RELATED_FLAG, OUTSIDE_PROPERTY, LOCATION_DESCRIPTOR, val(HOUSE_NUMBER_1) "HOUSE_NUM"
+			from VicmapPropertyTable, VicmapAddressTable
+			where EZI_ADDRESS like "%" + UserEnteredSearchParameter + "%" and
+				UserEnteredSearchParameter <> "" and
+				PROP_PFI = PROPERTY_PFI
+			into CommonGroundSearchQuery
+			order by HOUSE_NUM
+	case 3
+		select * from VicmapPropertyTable where PROP_PFI = UserEnteredSearchParameter into CommonGroundSearchQuery
+	case 4
+		select * from VicmapParcelTable where PARCEL_CREFNO = UserEnteredSearchParameter into CommonGroundSearchQuery
+	case 5
+		'select * from VicmapParcelTable where PARCEL_PLAN_NUMBER like "%" + UserEnteredSearchParameter + "%" and UserEnteredSearchParameter <> "" order by PARCEL_PLAN_NUMBER, into CommonGroundSearchQuery
+		select PARCEL_PFI, PARCEL_SPI, PARCEL_CREFNO, PARCEL_STATUS, PARCEL_PLAN_NUMBER, PARCEL_LOT_NUMBER, PARCEL_SEC, PARCEL_CROWN_STATUS, PARCEL_P_NUMBER, PARCEL_FURTHER_DESCRIPTION, PARCEL_PART, PARCEL_PFI_CREATED, PARCEL_UFI_CREATED, val(PARCEL_LOT_NUMBER) "Lot_Num_Value"
+			from VicmapParcelTable
+			where UserEnteredSearchParameter <> "" and
+				( PARCEL_PLAN_NUMBER like "%" + UserEnteredSearchParameter + "%" or PARCEL_FURTHER_DESCRIPTION like "%" + UserEnteredSearchParameter + "%" )
+			order by PARCEL_PLAN_NUMBER, Lot_Num_Value
+			into CommonGroundSearchQuery
+	case 6
+		select * from VicmapParcelTable where PARCEL_SPI like "%" + UserEnteredSearchParameter + "%" and UserEnteredSearchParameter <> "" into CommonGroundSearchQuery
+	case 7
+		select * from VicmapParcelTable where PARCEL_PFI = UserEnteredSearchParameter into CommonGroundSearchQuery
+end case
+
+
+do case SelectionInfo ( SEL_INFO_NROWS )
+	case 0
+		'note "No records were selected."
+		'if Ask ( "No records were selected." + chr$(13) + chr$(13) + "Do you wish to search again?" , "Yes" , "No" ) then
+		if Ask ( "No records were selected." , "Search Again" , "Cancel" ) then
+			goto StartSearch
+		end if
+	case 1
+		'---- Try to prevent MI 7.5 from crashing at Glen Eira
+		if SystemInfo ( SYS_INFO_MIVERSION ) = 750 then
+			run menu command M_QUERY_FIND_SELECTION
+			exit sub
+		end if
+		call WinFocusChangedHandler
+		call ZoomToSelection ( CurrentMapWindow , 4 )
+	case else
+		'---- Try to prevent MI 7.5 from crashing at Glen Eira
+		if SystemInfo ( SYS_INFO_MIVERSION ) = 750 then
+			run menu command M_QUERY_FIND_SELECTION
+			exit sub
+		end if
+		call WinFocusChangedHandler
+		call ZoomToSelection ( CurrentMapWindow , 4 )
+		browse * from Selection
+		if CurrentMapWindow <> 0 then
+			call TileWindowsForAudit ( CurrentMapWindow , FrontWindow() , 6 )
+		end if
+end case
+
+exit sub
+
+'Err:
+'	call LogEvent ( Error$() )
+
+end sub
+
+
+
+'================================================================================
+sub SearchMapInteractionHandler
+'================================================================================
+
+alter control 9991 active
+
+do case ReadControlValue ( 9876 )
+	case 1,3,4,7 alter control 8765 title " = "
+	case 2,5,6 alter control 8765 title " like "
+end case
+
+end sub
+
+
+
+'================================================================================
+function DoesMapContainLayer ( byval WindowNum as integer , byval LayerName as string ) as logical
+'================================================================================
+
+dim i as smallint
+
+if WindowNum = 0 then
+	exit function
+end if
+
+if WindowInfo ( WindowNum , WIN_INFO_TYPE ) <> WIN_MAPPER then
+	exit function
+end if
+
+for i = 1 to MapperInfo ( WindowNum , MAPPER_INFO_LAYERS )
+	if LayerInfo ( WindowNum , i , LAYER_INFO_NAME ) = LayerName then
+		DoesMapContainLayer = TRUE
+		exit function
+	end if
+next
+
+end function
+
+
+
+'=================================================================================
+function TableEditedDate ( byval TableName as string ) as date
+'=================================================================================
+
+	dim DATFileDate as date
+	dim MAPFileDate as date
+
+	if TableName not like "%\%" then
+		if IsTableOpen(TableName) then
+			TableName = TableInfo(TableName,19)	' (19 = TAB_INFO_TABFILE)
+		end if
+	else
+		if not FileExists(TableName) then
+			exit function
+		end if
+	end if
+
+	TableName = left$(TableName,len(TableName)-4)
+
+	DATFileDate = FileModifiedDate(TableName & ".DAT")
+	MAPFileDate = FileModifiedDate(TableName & ".MAP")
+
+	TableEditedDate = maximum(DATFileDate,MAPFileDate)
+
+end function
+
+
+'=================================================================================
+function FileModifiedDate	( byval Filepath as string ) as date
+'=================================================================================
+
+	dim hFile as integer 				' handle to the opened file
+	dim ctime as FILETIME 				' receives time of creation
+	dim atime as FILETIME 				' receives time of last access
+	dim mtime as FILETIME 				' receives time of last modification
+	dim thetime as SYSTEMTIME			' used to manipulate the time
+	dim retval as integer 				' return value
+	dim a_sec as Security_Attributes	'required for the CreateFile function
+
+	if Filepath = "" then exit sub end if
+	hFile = CreateFile(Filepath, &H80000000, &H1, a_sec, 3, &H20, 0)
+	if hFile = -1 then exit sub end if
+
+	retval = GetFileTime(hFile, ctime, atime, mtime)
+	retval = FileTimeToLocalFileTime (mtime, mtime)
+	retval = FileTimeToSystemTime (mtime, thetime)
+
+	'**** Close the file to free up resources.
+	retval = CloseHandle(hFile)
+
+	FileModifiedDate =	thetime.wYear &
+							string$(2 - len(str$(thetime.wMonth)),"0") & thetime.wMonth &
+							string$(2 - len(str$(thetime.wDay)),"0") & thetime.wDay
+
+end function
+
+
+
+'===========================================================================
+function IsOBDCConnectionStillOpen ( byval ServerConnectionNumber as integer ) as logical
+'===========================================================================
+
+dim SomeString as string
+
+onerror goto Err
+
+'**** this statement will fail (and go to Err) if ServerConnectionNumber is not valid
+SomeString = Server_ConnectInfo ( ServerConnectionNumber , SRV_CONNECT_INFO_DRIVER_NAME )
+
+IsOBDCConnectionStillOpen = TRUE
+
+exit sub
+Err:
+
+end function
+
+
+
+'===========================================================================
+function IsMapWindowOpen () as logical
+'===========================================================================
+dim i as smallint
+for i = 1 to NumWindows()
+	if WindowInfo ( i, WIN_INFO_TYPE ) = WIN_MAPPER then
+		IsMapWindowOpen = TRUE
+		exit for
+	end if
+next
+end function
+
+
+
+'===========================================================================
+sub CloseNamedWindow ( byval WindowName as string)
+'===========================================================================
+dim i as smallint
+for i = 1 to NumWindows()
+	if WindowInfo ( i , WIN_INFO_NAME ) = WindowName then
+		close window WindowID ( i )
+		exit for
+	end if
+next
+end sub
+
+
+
+'===========================================================================
+function IsTableOpen ( byval TableName as string ) as logical
+'===========================================================================
+
+dim i as smallint
+
+for i = 1 to NumTables()
+	if TableInfo ( i, TAB_INFO_NAME ) = TableName or TableInfo ( i, TAB_INFO_TABFILE ) = TableName then
+		IsTableOpen = TRUE
+		exit for
+	end if
+next
+
+end function
+
+
+
+'===========================================================================
+function FieldExists ( byval TableName as string, byval FieldName as string ) as logical
+'===========================================================================
+
+dim NumFields as smallint
+dim i as smallint
+
+onerror goto Err
+
+NumFields = TableInfo ( TableName, TAB_INFO_NCOLS )
+
+for i = 1 to NumFields
+	if ColumnInfo ( TableName, "COL" & i, 1 ) = FieldName then
+		FieldExists = TRUE
+		exit for
+	end if
+next
+
+exit sub
+Err:
+	FieldExists = FALSE
+
+end function
+
+
+
+'================================================================================
+sub TileWindowsForAudit ( byval MapWindowID as integer , byval BrowserWindowID as integer , byval NumBrowseRows as smallint )
+'================================================================================
+
+dim WindowFrameWidth as float
+dim WorkAreaWidth as float
+dim WorkAreaHeight as float
+dim BrowserHeight as float
+dim MapHeight as float
+dim BrowserY as float
+dim VistaHorizontalOffset as float
+dim VistaVerticalOffset as float
+dim VerticalOffset as float
+
+set Paper Units "mm"
+
+'WindowFrameWidth = abs ( WindowInfo ( WIN_MAPINFO , WIN_INFO_X ) ) ' correct when MapInfo is maximised
+WindowFrameWidth = 1.05833
+VistaHorizontalOffset = 4.5
+VistaVerticalOffset = 3
+
+'for two rows of buttonpads, set to 39.25
+'for one row of buttonpads, set to (?)
+VerticalOffset = 39.25
+
+WorkAreaWidth = WindowInfo ( WIN_MAPINFO , WIN_INFO_WIDTH ) - 4 * WindowFrameWidth - VistaHorizontalOffset
+WorkAreaHeight = WindowInfo ( WIN_MAPINFO , WIN_INFO_HEIGHT ) - WindowFrameWidth - VerticalOffset - 2 * VistaVerticalOffset
+
+BrowserHeight = 41
+BrowserY = WorkAreaHeight - BrowserHeight
+MapHeight = BrowserY - 7 - VistaVerticalOffset
+
+set window MapWindowID
+	position ( 0 , 0 ) units "mm"
+	width WorkAreaWidth units "mm"
+	height MapHeight units "mm"
+	restore
+
+set window BrowserWindowID
+	position ( 0 , BrowserY ) units "mm"
+	width WorkAreaWidth units "mm"
+	height BrowserHeight units "mm"
+	restore
+
+end sub
+
+
+
+'================================================================================
+function SpreadsheetAppPath () as string
+'================================================================================
+
+if FileExists("C:\Program Files\OpenOffice.org 2\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.0\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.1\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.1\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.2\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.2\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.3\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.3\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.4\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.4\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.5\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.5\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.6\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.6\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.7\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.7\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.8\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.8\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 2.9\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 2.9\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.0\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.1\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.1\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.2\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.2\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.3\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.3\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.4\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.4\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.5\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.5\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.6\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.6\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.7\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.7\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.8\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.8\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 3.9\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 3.9\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 4\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 4\program\scalc.exe" end if
+if FileExists("C:\Program Files\OpenOffice.org 4.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 4.0\program\scalc.exe" end if
+
+if FileExists("C:\Program Files\Microsoft Office\Office\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office10\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office10\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office11\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office11\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office12\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office12\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office13\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office13\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office14\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office14\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office15\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office15\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office16\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office16\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office17\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office17\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office18\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office18\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office19\EXCEL.EXE" end if
+if FileExists("C:\Program Files\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office20\EXCEL.EXE" end if
+
+end function
+
+
+
+'================================================================================
+function WindowsUserName () as string
+'================================================================================
+
+dim i as integer
+dim User as string
+i = 30
+User = string$ ( i , " " )
+
+if GetUserNameA ( User , i ) then
+	WindowsUserName = rtrim$ ( User )
+else
+	WindowsUserName = ""
+end if
+
+end function
+
+
+
+'=================================================================================
+'function DatasetSupplyDate ( byval TableFromDataset as string ) as date
+function DatasetSupplyDate ( byval XMLFile as string ) as date
+'=================================================================================
+
+dim DateString as string
+'dim PackingSlipPath as string
+
+'old format
+'PackingSlipPath = PathToDirectory$ ( TableFromDataset ) + "packing_slip.xml"
+'DateString = right$ ( InBetweenTextFromFile ( PackingSlipPath , "TIME_DATA_SUPPLIED" , "</param-value>" ) , 10 )
+
+'new format
+'PackingSlipPath = PathToDirectory$ ( TableFromDataset ) + XMLFile
+DateString = InBetweenTextFromFile ( XMLFile , "PRODUCT published_date=""" , " " )
+
+DatasetSupplyDate = left$(DateString,4) + mid$(DateString,6,2) + right$(DateString,2)
+
+end function
+
+
+
+'=================================================================================
+function InBetweenTextFromFile ( byval InputFile as string , byval BeforeText as string , byval AfterText as string ) as string
+'=================================================================================
+
+dim InputString as string
+dim CurrentLine as string
+dim FoundStart as logical
+dim FoundEnd as logical
+
+if not FileExists ( InputFile ) then
+	exit function
+end if
+
+open file InputFile for input as #1
+
+do while not FoundEnd or not EOF(1)
+	line input #1, CurrentLine
+	if CurrentLine like "%" + BeforeText + "%" then
+		FoundStart = TRUE
+	end if
+	if FoundStart then
+		InputString = InputString + CurrentLine
+		if CurrentLine like "%" + AfterText + "%" then
+			FoundEnd = TRUE
+			exit do
+		end if
+	end if
+loop
+
+close file #1
+
+if InputString <> "" then
+	InBetweenTextFromFile = InBetweenText ( InputString , BeforeText , AfterText )
+end if
+
+end function
+
+
+
+'=================================================================================
+function InBetweenText ( byval InputText as string , byval BeforeText as string , byval AfterText as string ) as string
+'=================================================================================
+' reads text from a string when the text before and after the desired text are known
+
+dim StartPos as integer
+dim EndPos as integer
+dim TextLength as integer
+
+StartPos = instr ( 1 , InputText , BeforeText ) + len ( BeforeText )
+EndPos = instr ( StartPos + 1 , InputText , AfterText )
+
+if EndPos = 0 then
+	EndPos = len ( InputText ) + 1
+end if
+
+TextLength = EndPos - StartPos
+
+InBetweenText =  mid$ ( InputText , StartPos , TextLength )
+
+end function
+
+
+
+'================================================================================
+sub ZoomToSelection ( byval MapWindowID as float , byval ZoomFactor as float )
+'================================================================================
+
+dim ObjX, ObjY, ObjW  as float
+dim ObjectTypeString as string
+
+if not IsThisWindowOpen ( MapWindowID ) then exit sub end if
+
+onerror goto Err
+
+do case SelectionInfo ( SEL_INFO_NROWS )
+	case 0
+		exit sub
+	case 1
+
+		if SystemInfo ( SYS_INFO_MIVERSION ) <= 700 then
+			run menu command M_QUERY_FIND_SELECTION
+			exit sub
+		end if
+
+		set coordsys window MapWindowID
+		set distance units "m"
+		ObjX = CentroidX(Selection.obj)
+		ObjY = CentroidY(Selection.obj)
+
+		ObjectTypeString = Selection.obj
+
+		'if ObjectInfo ( Selection.obj , OBJ_INFO_TYPE ) = OBJ_TYPE_POINT then
+		if ObjectTypeString = "Point" then
+			set map window MapWindowID center ( ObjX , ObjY )
+		else
+			ObjW = ObjectExtent ( Selection.obj )
+			set map window MapWindowID center ( ObjX , ObjY ) zoom ( ObjW * ZoomFactor ) units "m"
+		end if
+		'---- get rid of the temporary table, eg, Query1
+		close table TableInfo ( 0 , 1 )
+	case else
+		run menu command M_QUERY_FIND_SELECTION
+end case
+
+exit sub
+
+Err:
+	call LogEvent ( Error$() )
+	'run menu command M_QUERY_FIND_SELECTION
+
+end sub
+
+
+
+'=================================================================================
+function ObjectExtent ( byval InputObject as object ) as float
+'=================================================================================
+
+onerror goto Err
+set distance units "m"
+
+ObjectExtent = sqr(	(ObjectGeography(InputObject,1) - ObjectGeography(InputObject,3))^2 +
+				(ObjectGeography(InputObject,2) - ObjectGeography(InputObject,4))^2 )
+
+exit sub
+
+Err:
+	call LogEvent ( Error$() )
+	ObjectExtent = 200
+
+end function
+
+
+
+'================================================================================
+sub Pause ( byval DelayInSeconds as integer )
+'================================================================================
+
+dim StartTime as integer
+StartTime = Timer()
+
+do until Timer () >= StartTime + DelayInSeconds
+loop
+
+end sub
+
+
+
+'================================================================================
+sub EnsureFieldIsIndexed ( byval TableName as string , byval FieldName as string )
+'================================================================================
+
+dim TABDate as date
+dim INDDate as date
+dim TablePath as string
+
+
+if ColumnInfo ( TableName , FieldName , COL_INFO_INDEXED ) then
+	exit sub
+end if
+
+TablePath = left$ ( TableInfo ( TableName , TAB_INFO_TABFILE ) , len ( TableInfo ( TableName , TAB_INFO_TABFILE ) ) - 4 )
+TABDate = FileModifiedDate ( TablePath + ".TAB" )
+INDDate = FileModifiedDate ( TablePath + ".IND" )
+
+onerror goto Err
+
+call LogEvent ( "Indexing field " + FieldName + " on table " + TableName + "..." )
+
+'ensure table is open for write access
+if TableInfo ( TableName , TAB_INFO_READONLY ) then
+	close table TableName
+	open table TablePath + ".TAB" as TableName
+end if
+
+'ensure any old index file is removed
+if FileExists ( TablePath + ".IND" ) then
+	if FileModifiedDate ( TablePath + ".IND" ) < FileModifiedDate ( TablePath + ".TAB" ) then
+		close table TableName
+		call LogEvent ( "  Removing old index file..." )
+		kill TablePath + ".IND"
+		call LogEvent ( "  Old index file successfully removed." )
+		open table TablePath + ".TAB" as TableName
+		call LogEvent ( "  Table reopened." )
+	end if
+end if
+
+call LogEvent ( "  Creating index..." )
+create index on TableName (FieldName)
+call LogEvent ( "  Index created successfully." )
+
+'---- pause for a second because errors sometimes occur when attempting to index a field that has just been indexed
+'---- except MapInfo 9.02 where the pause actually crashes the program
+if SystemInfo ( SYS_INFO_MIVERSION ) < 900 then
+	call LogEvent ( "  Initiating pause..." )
+	call Pause ( 1 )
+	call LogEvent ( "  Pause complete." )
+end if
+
+exit sub
+
+Err:
+	call LogEvent ( "Error occurred while indexing field " + FieldName + " on table " + TableName + "." )
+	resume next
+
+end sub
+
+
+
+'================================================================================
+sub LogEvent ( byval EventString as string )
+'================================================================================
+
+onerror goto Err
+
+open file ApplicationDirectory$( ) + "Common Ground.log" for append as #101
+if EventString = "" then
+	print #101
+else
+	print #101 , Year(CurDate()) + "-" + Format$(Month(CurDate()),"00") + "-" + Format$(Day(CurDate()),"00") + "  " + str$(Time(24)) + "  " + EventString
+end if
+close file #101
+
+exit sub
+Err:
+
+end sub
+
+
+
+'================================================================================
+sub LaunchWebsite ( byval URL as string )
+'================================================================================
+
+dim Browser as string
+dim WebAddress as string
+
+if URL like "http://%" then
+	WebAddress = URL
+else
+	WebAddress = "http://" + URL
+end if
+
+if FileExists ( "C:\Program Files\Mozilla Firefox\firefox.exe" ) then
+	Browser = "C:\Program Files\Mozilla Firefox\firefox.exe"
+elseif FileExists ( "C:\Program Files\Internet Explorer\iexplore.exe" ) then
+	Browser = "C:\Program Files\Internet Explorer\iexplore.exe"
+end if
+
+if Browser <> "" then
+	run program Browser + " " + URL
+else
+	note "Browser not found. Unable to launch site for you." + chr$(13) + "To view, please launch your browser and go to" + chr$(13) + URL
+end if
+	
+end sub
+
+
+
+'================================================================================
+function FindAndReplaceText (byval InputString as string, byval TargetText as string, byval ReplacementText as string) as string
+'================================================================================
+
+dim i as integer
+dim NumTargets as integer
+dim SearchPosition as integer
+dim InputTextLength as integer
+dim TargetTextLength as integer
+dim ReplacementTextLength as integer
+dim TargetTextStartPosition as integer
+
+InputTextLength = len(InputString)
+TargetTextLength = len(TargetText)
+ReplacementTextLength = len(ReplacementText)
+NumTargets = 0
+SearchPosition = 1
+
+'**** Count the number of occurences of the TargetText
+do while like (mid$(ucase$(InputString), SearchPosition, InputTextLength), "%" & ucase$(TargetText) & "%", "")
+	NumTargets = NumTargets + 1
+	SearchPosition = instr(SearchPosition, ucase$(InputString), ucase$(TargetText)) + TargetTextLength
+loop
+for i = 1 to NumTargets
+	TargetTextStartPosition = instr(1,ucase$(InputString),ucase$(TargetText))
+	InputString =	   left$(InputString, TargetTextStartPosition - 1) &
+	                ReplacementText &
+	                mid$(InputString, TargetTextStartPosition + TargetTextLength, InputTextLength - TargetTextLength)
+next
+
+FindAndReplaceText = InputString
+
+end function
+
+
+
+'================================================================================
+function FindAndReplaceTextRecursive (byval InputString as string, byval TargetText as string, byval ReplacementText as string) as string
+'================================================================================
+
+do while like(InputString, "%" & TargetText & "%", "")
+	InputString = FindAndReplaceText(InputString,TargetText,ReplacementText)
+loop
+
+FindAndReplaceTextRecursive = InputString
+
+end function
+
+
+
+'================================================================================
+function DoesUserHaveWritePermissionOnFolder ( byval FolderName as string ) as logical
+'================================================================================
+
+dim TestFile as string
+
+onerror goto Err
+TestFile = TempFileName$(FolderName)
+
+Create Table "Test" (Field1 Char(10)) file TestFile
+
+DoesUserHaveWritePermissionOnFolder = TRUE
+Drop Table Test
+
+exit sub
+
+Err:
+
+end function
+
+
+
+'================================================================================
+sub RestoreFrontWindowIfMaximised
+'================================================================================
+
+onerror goto Err
+
+if NumWIndows() = 0 then exit sub end if
+
+if WindowInfo ( FrontWindow () , WIN_INFO_STATE ) = WIN_STATE_MAXIMIZED then
+	set window FrontWindow() restore
+end if
+
+exit sub
+
+Err:
+
+end sub
+
+
+
+'===========================================================================
+sub SmartAppend ( byval BaseTable as string, byval SuppTable as string, byval SourceFileField as string )
+'===========================================================================
+
+	dim NumBaseFields as smallint
+	dim i as smallint
+	dim SharedFieldList as string
+	dim BaseFieldName as string
+	dim FoundMatchingField as logical
+	dim BaseTableAlreadyOpen as logical
+	dim SuppTableAlreadyOpen as logical
+	dim SourceFileName as string
+
+	if IsTableOpen ( BaseTable ) then BaseTableAlreadyOpen = 1 end if
+	if IsTableOpen ( SuppTable ) then SuppTableAlreadyOpen = 1 end if
+
+	if BaseTable like "%\%" then open table BaseTable BaseTable = TableInfo(0,1) end if
+	if SuppTable like "%\%" then open table SuppTable SuppTable = TableInfo(0,1) end if
+	SourceFileName = left$(PathToFileName$(TableInfo(SuppTable,19)),len(PathToFileName$(TableInfo(SuppTable,19)))- 4)
+
+	'exit if base table is read-only
+	if TableInfo ( BaseTable, 6 ) then exit sub end if
+
+	NumBaseFields = TableInfo ( BaseTable, 4 )
+
+
+	for i = 1 to NumBaseFields
+		BaseFieldName = ColumnInfo ( BaseTable, "COL" & i, 1 )
+		if FieldExists ( SuppTable, BaseFieldName ) then
+			SharedFieldList = SharedFieldList & BaseFieldName & ", "
+			FoundMatchingField = 1	'ie, TRUE
+		end if
+	next		
+
+
+	if not FoundMatchingField then goto TidyUp end if
+
+	if not BaseTableAlreadyOpen then
+		set table BaseTable fastedit on undo off
+	end if
+
+	'remove the last comma and space from the string
+	SharedFieldList = left$( SharedFieldList , len( SharedFieldList ) - 2 )
+
+	if FieldExists ( BaseTable, SourceFileField ) then
+		run command "insert into " & BaseTable & " ( " & SharedFieldList & ", " & SourceFileField & " ) select " & SharedFieldList & ", """ & SourceFileName & """" & " from " & SuppTable
+	else
+		run command "insert into " & BaseTable & " ( " & SharedFieldList & " ) select " & SharedFieldList & " from " & SuppTable
+	end if
+
+	commit table BaseTable
+
+
+	TidyUp:
+		if not BaseTableAlreadyOpen then close table BaseTable end if
+		if not SuppTableAlreadyOpen then close table SuppTable end if
+
+end sub
+
+
+

@@ -1,0 +1,907 @@
+
+include "Common Ground.DEF"
+
+declare sub AddressDialogLaunchHandler
+declare sub AddressDialogInteractionHandler
+declare sub DataSourceToggleHandler
+declare sub PopulateAddressDialogDetails ( InputAddress () as AddressCaptureForm )
+
+
+define ADDRESS_SOURCE_RADIOGROUP		481
+define ADDRESS_USE_COORDS_TICKBOX		485
+define ADDRESS_DIST_RELATED_TICKBOX		482
+define ADDRESS_PRIMARY_RADIOGROUP		483
+define ADDRESS_POSITION_RADIOGROUP		484
+
+dim UserEnteredNewPropNum as logical
+
+
+'================================================================================
+sub AddressDialog
+'================================================================================
+
+dim AddressDisplay as string
+
+dim DialogWidth as smallint
+dim GroupBox1X, GroupBox1Y, GroupBox1W, GroupBox1H as smallint
+dim GroupBox2X, GroupBox2Y, GroupBox2W, GroupBox2H as smallint
+dim GroupBox3X, GroupBox3Y, GroupBox3W, GroupBox3H as smallint
+dim GroupBox4X, GroupBox4Y, GroupBox4W, GroupBox4H as smallint
+
+dim Row1Y, Row2Y, Row3Y, Row4Y, Row5Y, Row6Y, Row7Y, Row8Y, Row9Y, Row10Y, Row11Y, Row12Y as smallint
+dim Col1X, Col2X, Col3X, Col4X, Col5X, Col6X, Col7X, Col8X, Col9X, Col10X, Col11X, Col12X, Col13X, Col14X, Col15X as smallint
+
+
+DialogWidth = 400
+
+GroupBox1X = 10
+GroupBox1Y = 10
+GroupBox1W = 118
+GroupBox1H = 42
+
+GroupBox2X = 10
+GroupBox2Y = GroupBox1Y + GroupBox1H + 9
+GroupBox2W = DialogWidth - 20
+GroupBox2H = 200
+
+Row1Y = GroupBox2Y + 12
+Row2Y = Row1Y + 15
+Row3Y = Row2Y + 15
+Row4Y = Row3Y + 15
+Row5Y = Row4Y + 15
+Row6Y = Row5Y + 15
+Row7Y = Row6Y + 15
+Row8Y = Row7Y + 15
+Row9Y = Row8Y + 15
+Row10Y = Row9Y + 15
+Row11Y = Row10Y + 15
+Row12Y = Row11Y + 15
+
+Col1X = 20
+Col2X = Col1X + 35
+Col3X = Col2X + 28
+Col4X = 60
+Col5X = Col4X + 26
+Col6X = Col5X + 22
+Col7X = Col6X + 33
+Col8X = Col7X + 30
+Col9X = Col8X + 28
+Col10X = Col9X + 22
+Col11X = Col10X + 28
+Col12X = Col11X + 22
+Col13X = Col12X + 33
+Col14X = Col13X + 30
+Col15X = Col14X + 28
+
+GroupBox3X = Col7X
+GroupBox3Y = GroupBox1Y
+GroupBox3W = 73
+GroupBox3H = GroupBox1H
+
+GroupBox4X = GroupBox3X + GroupBox3W + 13
+GroupBox4Y = GroupBox1Y
+GroupBox4W = DialogWidth - GroupBox4X - 11
+GroupBox4H = GroupBox1H
+
+
+dialog
+	title "Common Ground - Address Edit   (Property " + ActionPropNumValue + ")"
+	calling AddressDialogLaunchHandler
+	width DialogWidth
+
+
+'---- Address Source ---------------------------------------------------
+
+	control GroupBox
+		position 10, GroupBox1Y
+		width GroupBox1W height GroupBox1H
+		title "Address Source"
+
+	control RadioGroup
+		id ADDRESS_SOURCE_RADIOGROUP
+		position 20, GroupBox1Y + 12
+		title "&" + RatesDataSource + ";&" + VicmapDataSource
+		value 0
+		calling DataSourceToggleHandler
+	
+
+'---- Address Type ---------------------------------------------------
+
+	control GroupBox
+		position GroupBox3X, GroupBox3Y
+		width GroupBox3W height GroupBox3H
+		title "Address Type"
+
+	control RadioGroup
+		ID ADDRESS_PRIMARY_RADIOGROUP
+		position GroupBox3X + 10, GroupBox3Y + 12
+		title "&Primary;&Secondary"
+		value 0
+		disable
+		into AddressDialogPrimaryValue
+
+
+'---- Address Position ---------------------------------------------------
+
+	control GroupBox
+		position GroupBox4X, GroupBox4Y
+		width GroupBox4W height GroupBox4H
+		title "Address Position"
+
+	control CheckBox
+		ID ADDRESS_DIST_RELATED_TICKBOX
+		position GroupBox4X + 10, GroupBox3Y + 12
+		title "Distance Related"
+		value 0
+		calling AddressDialogInteractionHandler
+		into AddressDialogDistRelTickbox
+
+	control RadioGroup
+		ID ADDRESS_POSITION_RADIOGROUP
+		position Col13X + 10, GroupBox1Y + 12
+		title "&Existing Position;&Click Position"
+		disable
+		value 0
+		into AddressDialogPositionValue
+
+
+''---- Address Position (new - implement after Col Salmon approves manual address positioning)
+'
+'	control GroupBox
+'		position GroupBox4X, GroupBox4Y
+'		width GroupBox4W height GroupBox4H
+'		title "Address Position"
+'
+'	control CheckBox
+'		ID ADDRESS_USE_COORDS_TICKBOX
+'		position GroupBox4X + 10, GroupBox3Y + 12
+'		title "Use Coords"
+'		value 0
+'		calling AddressDialogInteractionHandler
+'		into AddressDialogUseCoordsTickbox
+'
+'	control CheckBox
+'		ID ADDRESS_DIST_RELATED_TICKBOX
+'		position GroupBox4X + 10, GroupBox3Y + 12 + 14
+'		title "Distance Related"
+'		value 0
+'		calling AddressDialogInteractionHandler
+'		into AddressDialogDistRelTickbox
+'
+'	control RadioGroup
+'		ID ADDRESS_POSITION_RADIOGROUP
+'		position Col13X + 10, GroupBox1Y + 12
+'		title "&Existing Position;&Click Position"
+'		disable
+'		value 0
+'		into AddressDialogPositionValue
+
+
+'---- Address Details ---------------------------------------------------
+
+	control GroupBox
+		position 10, GroupBox2Y
+		width GroupBox2W height GroupBox2H
+		title "Address Details"
+
+
+'---- Sub Unit ----------------------------------
+
+	control StaticText
+		position Col1X, Row1Y
+		title "Sub Unit:"
+
+	control StaticText
+		id ADDRESS_LABEL_SU_TYPE
+		position Col6X, Row1Y
+		title "Type"
+	control EditText
+		id ADDRESS_SU_TYPE
+		position Col7X, Row1Y
+		width 73
+		into AddressDialogValues ( 1 ) . SU_TYPE
+
+	control StaticText
+		id ADDRESS_LABEL_SU_PREFIX_1
+		position Col4X, Row2Y
+		title "Prefix1"
+	control EditText
+		id ADDRESS_SU_PREFIX_1
+		position Col5X, Row2Y
+		width 15
+		into AddressDialogValues ( 1 ) . SU_PREFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_SU_NO_1
+		position Col6X, Row2Y
+		title "Number1"
+	control EditText
+		id ADDRESS_SU_NO_1
+		position Col7X, Row2Y
+		width 25
+		into AddressDialogValues ( 1 ) . SU_NO_1
+
+	control StaticText
+		id ADDRESS_LABEL_SU_SUFF_1
+		position Col8X, Row2Y
+		title "Suffix1"
+	control EditText
+		id ADDRESS_SU_SUFF_1
+		position Col9X, Row2Y
+		width 15
+		into AddressDialogValues ( 1 ) . SU_SUFF_1
+
+	control StaticText
+		id ADDRESS_LABEL_SU_PREFIX_2
+		position Col10X, Row2Y
+		title "Prefix2"
+	control EditText
+		id ADDRESS_SU_PREFIX_2
+		position Col11X, Row2Y
+		width 15
+		into AddressDialogValues ( 1 ) . SU_PREFIX_2
+
+	control StaticText
+		id ADDRESS_LABEL_SU_NO_2
+		position Col12X, Row2Y
+		title "Number2"
+	control EditText
+		id ADDRESS_SU_NO_2
+		position Col13X, Row2Y
+		width 25
+		into AddressDialogValues ( 1 ) . SU_NO_2
+
+	control StaticText
+		id ADDRESS_LABEL_SU_SUFF_2
+		position Col14X, Row2Y
+		title "Suffix2"
+	control EditText
+		id ADDRESS_SU_SUFF_2
+		position Col15X, Row2Y
+		width 15
+		into AddressDialogValues ( 1 ) . SU_SUFF_2
+
+
+
+'---- Floor -------------------------------------
+
+	control StaticText
+		position Col1X, Row3Y
+		title "Floor:"
+
+	control StaticText
+		id ADDRESS_LABEL_FL_TYPE
+		position Col6X, Row3Y
+		title "Type"
+	control EditText
+		id ADDRESS_FL_TYPE
+		position Col7X, Row3Y
+		width 73
+		into AddressDialogValues ( 1 ) . FL_TYPE
+
+	control StaticText
+		id ADDRESS_LABEL_FL_PREFIX_1
+		position Col4X, Row4Y
+		title "Prefix1"
+	control EditText
+		id ADDRESS_FL_PREFIX_1
+		position Col5X, Row4Y
+		width 15
+		into AddressDialogValues ( 1 ) . FL_PREFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_FL_NO_1
+		position Col6X, Row4Y
+		title "Number1"
+	control EditText
+		id ADDRESS_FL_NO_1
+		position Col7X, Row4Y
+		width 25
+		into AddressDialogValues ( 1 ) . FL_NO_1
+
+	control StaticText
+		id ADDRESS_LABEL_FL_SUFF_1
+		position Col8X, Row4Y
+		title "Suffix1"
+	control EditText
+		id ADDRESS_FL_SUFF_1
+		position Col9X, Row4Y
+		width 15
+		into AddressDialogValues ( 1 ) . FL_SUFF_1
+
+	control StaticText
+		id ADDRESS_LABEL_FL_PREFIX_2
+		position Col10X, Row4Y
+		title "Prefix2"
+	control EditText
+		id ADDRESS_FL_PREFIX_2
+		position Col11X, Row4Y
+		width 15
+		into AddressDialogValues ( 1 ) . FL_PREFIX_2
+
+	control StaticText
+		id ADDRESS_LABEL_FL_NO_2
+		position Col12X, Row4Y
+		title "Number2"
+	control EditText
+		id ADDRESS_FL_NO_2
+		position Col13X, Row4Y
+		width 25
+		into AddressDialogValues ( 1 ) . FL_NO_2
+
+	control StaticText
+		id ADDRESS_LABEL_FL_SUFF_2
+		position Col14X, Row4Y
+		title "Suffix2"
+	control EditText
+		id ADDRESS_FL_SUFF_2
+		position Col15X, Row4Y
+		width 15
+		into AddressDialogValues ( 1 ) . FL_SUFF_2
+
+
+'---- Property ----------------------------------
+
+	control StaticText
+		position Col1X, Row5Y
+		title "Property:"
+
+	control StaticText
+		id ADDRESS_LABEL_PR_NAME_1
+		position Col6X, Row5Y
+		title "Name1"
+	control EditText
+		id ADDRESS_PR_NAME_1
+		position Col7X, Row5Y
+		'width 73
+		width 123
+		into AddressDialogValues ( 1 ) . PR_NAME_1
+
+	control StaticText
+		id ADDRESS_LABEL_PR_NAME_2
+		position Col6X, Row6Y
+		title "Name2"
+	control EditText
+		id ADDRESS_PR_NAME_2
+		position Col7X, Row6Y
+		width 123
+		into AddressDialogValues ( 1 ) . PR_NAME_2
+
+	control StaticText
+		id ADDRESS_LABEL_LOC_DES
+		position Col4X + 11, Row7Y
+		title "Location Description"
+	control EditText
+		id ADDRESS_LOC_DES
+		position Col7X, Row7Y
+		width 123
+		into AddressDialogValues ( 1 ) . LOC_DES
+
+
+'---- House -------------------------------------
+
+	control StaticText
+		position Col1X, Row8Y
+		title "House:"
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_PREFIX_1
+		position Col4X, Row8Y
+		title "Prefix1"
+	control EditText
+		id ADDRESS_HOUSE_PREFIX_1
+		position Col5X, Row8Y
+		width 15
+		into AddressDialogValues ( 1 ) . HOUSE_PREFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_NUMBER_1
+		position Col6X, Row8Y
+		title "Number1"
+	control EditText
+		id ADDRESS_HOUSE_NUMBER_1
+		position Col7X, Row8Y
+		width 25
+		into AddressDialogValues ( 1 ) . HOUSE_NUMBER_1
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_SUFFIX_1
+		position Col8X, Row8Y
+		title "Suffix1"
+	control EditText
+		id ADDRESS_HOUSE_SUFFIX_1
+		position Col9X, Row8Y
+		width 15
+		into AddressDialogValues ( 1 ) . HOUSE_SUFFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_PREFIX_2
+		position Col10X, Row8Y
+		title "Prefix2"
+	control EditText
+		id ADDRESS_HOUSE_PREFIX_2
+		position Col11X, Row8Y
+		width 15
+		into AddressDialogValues ( 1 ) . HOUSE_PREFIX_2
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_NUMBER_2
+		position Col12X, Row8Y
+		title "Number2"
+	control EditText
+		id ADDRESS_HOUSE_NUMBER_2
+		position Col13X, Row8Y
+		width 25
+		into AddressDialogValues ( 1 ) . HOUSE_NUMBER_2
+
+	control StaticText
+		id ADDRESS_LABEL_HOUSE_SUFFIX_2
+		position Col14X, Row8Y
+		title "Suffix2"
+	control EditText
+		id ADDRESS_HOUSE_SUFFIX_2
+		position Col15X, Row8Y
+		width 15
+		into AddressDialogValues ( 1 ) . HOUSE_SUFFIX_2
+
+
+
+'---- Displayed ---------------------------------
+
+	control StaticText
+		position Col1X, Row9Y
+		title "Displayed:"
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_PREFIX_1
+		position Col4X, Row9Y
+		title "Prefix1"
+	control EditText
+		id ADDRESS_DISPLAY_PREFIX_1
+		position Col5X, Row9Y
+		width 15
+		into AddressDialogValues ( 1 ) . DISPLAY_PREFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_NO_1
+		position Col6X, Row9Y
+		title "Number1"
+	control EditText
+		id ADDRESS_DISPLAY_NO_1
+		position Col7X, Row9Y
+		width 25
+		into AddressDialogValues ( 1 ) . DISPLAY_NO_1
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_SUFFIX_1
+		position Col8X, Row9Y
+		title "Suffix1"
+	control EditText
+		id ADDRESS_DISPLAY_SUFFIX_1
+		position Col9X, Row9Y
+		width 15
+		into AddressDialogValues ( 1 ) . DISPLAY_SUFFIX_1
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_PREFIX_2
+		position Col10X, Row9Y
+		title "Prefix2"
+	control EditText
+		id ADDRESS_DISPLAY_PREFIX_2
+		position Col11X, Row9Y
+		width 15
+		into AddressDialogValues ( 1 ) . DISPLAY_PREFIX_2
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_NO_2
+		position Col12X, Row9Y
+		title "Number2"
+	control EditText
+		id ADDRESS_DISPLAY_NO_2
+		position Col13X, Row9Y
+		width 25
+		into AddressDialogValues ( 1 ) . DISPLAY_NO_2
+
+	control StaticText
+		id ADDRESS_LABEL_DISPLAY_SUFFIX_2
+		position Col14X, Row9Y
+		title "Suffix2"
+	control EditText
+		id ADDRESS_DISPLAY_SUFFIX_2
+		position Col15X, Row9Y
+		width 15
+		into AddressDialogValues ( 1 ) . DISPLAY_SUFFIX_2
+
+
+'---- Street ------------------------------------
+
+	control StaticText
+		position Col1X, Row10Y
+		title "Street:"
+
+	control StaticText
+		id ADDRESS_LABEL_STREET_NAME
+		position Col6X, Row10Y
+		title "Name"
+	control EditText
+		id ADDRESS_STREET_NAME
+		position Col7X, Row10Y
+		width 123
+		into AddressDialogValues ( 1 ) . STREET_NAME
+
+	control StaticText
+		id ADDRESS_LABEL_STREET_TYPE
+		position Col6X, Row11Y
+		title "Type"
+	control EditText
+		id ADDRESS_STREET_TYPE
+		position Col7X, Row11Y
+		width 123
+		into AddressDialogValues ( 1 ) . STREET_TYPE
+
+	control StaticText
+		id ADDRESS_LABEL_STREET_SUFFIX
+		position Col12X, Row11Y
+		title "Suffix"
+	control EditText
+		id ADDRESS_STREET_SUFFIX
+		position Col13X, Row11Y
+		width 25
+		into AddressDialogValues ( 1 ) . STREET_SUFFIX
+
+
+'---- Locality ----------------------------------
+
+	control StaticText
+		position Col1X, Row12Y
+		title "Locality (optional):"
+
+	control StaticText
+		id ADDRESS_LABEL_LOCALITY
+		position Col6X, Row12Y
+		title "Name"
+	control EditText
+		id ADDRESS_LOCALITY
+		position Col7X, Row12Y
+		width 123
+		into AddressDialogValues ( 1 ) . LOCALITY
+
+	control StaticText
+		id ADDRESS_LABEL_POSTCODE
+		position Col12X, Row12Y
+		title "Postcode"
+	control EditText
+		id ADDRESS_POSTCODE
+		position Col13X, Row12Y
+		width 25
+		into AddressDialogValues ( 1 ) . POSTCODE
+
+
+
+'----------------------------------------------------------
+
+	'---- Spacer
+	control StaticText
+		position 20, GroupBox2Y + GroupBox2H
+		title " "
+
+	control OKButton
+
+	control CancelButton
+		ID THE_CANCEL_BUTTON
+
+	control Button
+		ID THE_HELP_BUTTON
+		title "Help"
+		disable
+
+end sub
+
+
+
+'================================================================================
+sub AddressDialogLaunchHandler
+'================================================================================
+
+'if Ubound ( RatesAddressDetails ) = 1 then
+'	do case ActionAddressPicklistValue
+'		case ADDRESS_MODIFY
+'			if VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY = "Y" then
+'				alter control ADDRESS_PRIMARY_RADIOGROUP value 1
+'			else
+'				alter control ADDRESS_PRIMARY_RADIOGROUP value 2
+'			end if
+'		case ADDRESS_ADD
+'			alter control ADDRESS_PRIMARY_RADIOGROUP value 2
+'	end case
+'end if
+
+'--- TRUE or FALSE
+UserEnteredNewPropNum = ( ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM )
+
+
+'---- Address Source ---------------------------------------------------
+
+'---- prevent the user from selecting the Vicmap Property address if they have entered in a different property number
+if UserEnteredNewPropNum then
+	alter control ADDRESS_SOURCE_RADIOGROUP disable
+end if
+
+'---- indicate the source of the address information if from rates
+if Ubound ( RatesAddressDetails ) > 0 then
+	alter control ADDRESS_SOURCE_RADIOGROUP value 1
+end if
+
+
+'---- Address Type ---------------------------------------------------
+
+'---- replaced this with slight variation below on 16-10-2007 so that ADDRESS_ADD
+'---- is the overriding factor in deciding if address is primary or secondary.
+'if UserEnteredNewPropNum then
+'	'---- enable Primary option because user may want to enter secondary address
+'	alter control ADDRESS_PRIMARY_RADIOGROUP value 1 enable
+'else
+'	do case ActionAddressPicklistValue
+'		case ADDRESS_MODIFY
+'			do case VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY
+'				case "Y",""	alter control ADDRESS_PRIMARY_RADIOGROUP value 1
+'				case "N"	alter control ADDRESS_PRIMARY_RADIOGROUP value 2
+'			end case
+'		case ADDRESS_ADD
+'			alter control ADDRESS_PRIMARY_RADIOGROUP value 2
+'	end case
+'end if
+
+do case ActionAddressPicklistValue
+	case ADDRESS_MODIFY
+		if UserEnteredNewPropNum then
+			'---- enable Primary option because user may want to enter secondary address
+			alter control ADDRESS_PRIMARY_RADIOGROUP value 1 enable
+		else
+			do case VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY
+				case "Y",""	alter control ADDRESS_PRIMARY_RADIOGROUP value 1
+				case "N"	alter control ADDRESS_PRIMARY_RADIOGROUP value 2
+			end case
+		end if
+	case ADDRESS_ADD
+		alter control ADDRESS_PRIMARY_RADIOGROUP value 2 disable
+end case
+
+
+'---- Address Position ---------------------------------------------------
+
+do case ActionAddressPicklistValue
+	case ADDRESS_MODIFY
+		if not UserEnteredNewPropNum and VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG = "Y" then
+			alter control ADDRESS_DIST_RELATED_TICKBOX value 1
+			alter control ADDRESS_POSITION_RADIOGROUP value 1 enable
+			AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = "Y"
+			'---- these three lines below were commented out for some reason;
+			'---- uncommenting them on 11-01-2007 due to some rural addresses getting null coordinates
+			AddressDialogValues ( 1 ) . EASTING = round ( val ( VicmapAddressDetails ( TargetAddressPicklistValue ) . EASTING ) , 1 )
+			AddressDialogValues ( 1 ) . NORTHING = round ( val ( VicmapAddressDetails ( TargetAddressPicklistValue ) . NORTHING ) , 1 )
+			AddressDialogValues ( 1 ) . DATUM_PROJ = VicmapAddressDetails ( TargetAddressPicklistValue ) . DATUM_PROJ
+		else
+			alter control ADDRESS_DIST_RELATED_TICKBOX value 0
+			alter control ADDRESS_POSITION_RADIOGROUP disable
+		end if				
+	case ADDRESS_ADD
+		'---- commented out these three lines below on 16-10-2007 so that secondary addresses
+		'---- are not automatically assumed to be distance related
+		'alter control ADDRESS_DIST_RELATED_TICKBOX value 1
+		'alter control ADDRESS_POSITION_RADIOGROUP value 2 disable
+		'AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = "Y"
+		'---- these three lines below were commented out for some reason;
+		'---- uncommenting them on 11-01-2007 due to some rural addresses getting null coordinates
+		'AddressDialogValues ( 1 ) . EASTING = round ( M1X , 1 )
+		'AddressDialogValues ( 1 ) . NORTHING = round ( M1Y , 1 )
+		'AddressDialogValues ( 1 ) . DATUM_PROJ = ActiveCoordSys
+end case
+
+
+'---- Address Details ---------------------------------------------------
+
+if ubound ( RatesAddressDetails ) = 1 then
+	call PopulateAddressDialogDetails ( RatesAddressDetails ( 1 ) )
+end if
+
+if AddressDialogControl ( 1 ) . SU_TYPE = "OFF" then alter control ADDRESS_SU_TYPE disable alter control ADDRESS_LABEL_SU_TYPE disable end if
+if AddressDialogControl ( 1 ) . SU_PREFIX_1 = "OFF" then alter control ADDRESS_SU_PREFIX_1 disable alter control ADDRESS_LABEL_SU_PREFIX_1 disable end if
+if AddressDialogControl ( 1 ) . SU_NO_1 = "OFF" then alter control ADDRESS_SU_NO_1 disable alter control ADDRESS_LABEL_SU_NO_1 disable end if
+if AddressDialogControl ( 1 ) . SU_SUFF_1 = "OFF" then alter control ADDRESS_SU_SUFF_1 disable alter control ADDRESS_LABEL_SU_SUFF_1 disable end if
+if AddressDialogControl ( 1 ) . SU_PREFIX_2 = "OFF" then alter control ADDRESS_SU_PREFIX_2 disable alter control ADDRESS_LABEL_SU_PREFIX_2 disable end if
+if AddressDialogControl ( 1 ) . SU_NO_2 = "OFF" then alter control ADDRESS_SU_NO_2 disable alter control ADDRESS_LABEL_SU_NO_2 disable end if
+if AddressDialogControl ( 1 ) . SU_SUFF_2 = "OFF" then alter control ADDRESS_SU_SUFF_2 disable alter control ADDRESS_LABEL_SU_SUFF_2 disable end if
+if AddressDialogControl ( 1 ) . FL_TYPE = "OFF" then alter control ADDRESS_FL_TYPE disable alter control ADDRESS_LABEL_FL_TYPE disable end if
+if AddressDialogControl ( 1 ) . FL_PREFIX_1 = "OFF" then alter control ADDRESS_FL_PREFIX_1 disable alter control ADDRESS_LABEL_FL_PREFIX_1 disable end if
+if AddressDialogControl ( 1 ) . FL_NO_1 = "OFF" then alter control ADDRESS_FL_NO_1 disable alter control ADDRESS_LABEL_FL_NO_1 disable end if
+if AddressDialogControl ( 1 ) . FL_SUFF_1 = "OFF" then alter control ADDRESS_FL_SUFF_1 disable alter control ADDRESS_LABEL_FL_SUFF_1 disable end if
+if AddressDialogControl ( 1 ) . FL_PREFIX_2 = "OFF" then alter control ADDRESS_FL_PREFIX_2 disable alter control ADDRESS_LABEL_FL_PREFIX_2 disable end if
+if AddressDialogControl ( 1 ) . FL_NO_2 = "OFF" then alter control ADDRESS_FL_NO_2 disable alter control ADDRESS_LABEL_FL_NO_2 disable end if
+if AddressDialogControl ( 1 ) . FL_SUFF_2 = "OFF" then alter control ADDRESS_FL_SUFF_2 disable alter control ADDRESS_LABEL_FL_SUFF_2 disable end if
+if AddressDialogControl ( 1 ) . PR_NAME_1 = "OFF" then alter control ADDRESS_PR_NAME_1 disable alter control ADDRESS_LABEL_PR_NAME_1 disable end if
+if AddressDialogControl ( 1 ) . PR_NAME_2 = "OFF" then alter control ADDRESS_PR_NAME_2 disable alter control ADDRESS_LABEL_PR_NAME_2 disable end if
+if AddressDialogControl ( 1 ) . LOC_DES = "OFF" then alter control ADDRESS_LOC_DES disable alter control ADDRESS_LABEL_LOC_DES disable end if
+if AddressDialogControl ( 1 ) . HOUSE_PREFIX_1 = "OFF" then alter control ADDRESS_HOUSE_PREFIX_1 disable alter control ADDRESS_LABEL_HOUSE_PREFIX_1 disable end if
+if AddressDialogControl ( 1 ) . HOUSE_NUMBER_1 = "OFF" then alter control ADDRESS_HOUSE_NUMBER_1 disable alter control ADDRESS_LABEL_HOUSE_NUMBER_1 disable end if
+if AddressDialogControl ( 1 ) . HOUSE_SUFFIX_1 = "OFF" then alter control ADDRESS_HOUSE_SUFFIX_1 disable alter control ADDRESS_LABEL_HOUSE_SUFFIX_1 disable end if
+if AddressDialogControl ( 1 ) . HOUSE_PREFIX_2 = "OFF" then alter control ADDRESS_HOUSE_PREFIX_2 disable alter control ADDRESS_LABEL_HOUSE_PREFIX_2 disable end if
+if AddressDialogControl ( 1 ) . HOUSE_NUMBER_2 = "OFF" then alter control ADDRESS_HOUSE_NUMBER_2 disable alter control ADDRESS_LABEL_HOUSE_NUMBER_2 disable end if
+if AddressDialogControl ( 1 ) . HOUSE_SUFFIX_2 = "OFF" then alter control ADDRESS_HOUSE_SUFFIX_2 disable alter control ADDRESS_LABEL_HOUSE_SUFFIX_2 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_PREFIX_1 = "OFF" then alter control ADDRESS_DISPLAY_PREFIX_1 disable alter control ADDRESS_LABEL_DISPLAY_PREFIX_1 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_NO_1 = "OFF" then alter control ADDRESS_DISPLAY_NO_1 disable alter control ADDRESS_LABEL_DISPLAY_NO_1 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_SUFFIX_1 = "OFF" then alter control ADDRESS_DISPLAY_SUFFIX_1 disable alter control ADDRESS_LABEL_DISPLAY_SUFFIX_1 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_PREFIX_2 = "OFF" then alter control ADDRESS_DISPLAY_PREFIX_2 disable alter control ADDRESS_LABEL_DISPLAY_PREFIX_2 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_NO_2 = "OFF" then alter control ADDRESS_DISPLAY_NO_2 disable alter control ADDRESS_LABEL_DISPLAY_NO_2 disable end if
+if AddressDialogControl ( 1 ) . DISPLAY_SUFFIX_2 = "OFF" then alter control ADDRESS_DISPLAY_SUFFIX_2 disable alter control ADDRESS_LABEL_DISPLAY_SUFFIX_2 disable end if
+if AddressDialogControl ( 1 ) . STREET_NAME = "OFF" then alter control ADDRESS_STREET_NAME disable alter control ADDRESS_LABEL_STREET_NAME disable end if
+if AddressDialogControl ( 1 ) . STREET_TYPE = "OFF" then alter control ADDRESS_STREET_TYPE disable alter control ADDRESS_LABEL_STREET_TYPE disable end if
+if AddressDialogControl ( 1 ) . STREET_SUFFIX = "OFF" then alter control ADDRESS_STREET_SUFFIX disable alter control ADDRESS_LABEL_STREET_SUFFIX disable end if
+if AddressDialogControl ( 1 ) . LOCALITY = "OFF" then alter control ADDRESS_LOCALITY disable alter control ADDRESS_LABEL_LOCALITY disable end if
+if AddressDialogControl ( 1 ) . POSTCODE = "OFF" then alter control ADDRESS_POSTCODE disable alter control ADDRESS_LABEL_POSTCODE disable end if
+
+end sub
+
+
+
+'================================================================================
+sub AddressDialogInteractionHandler
+'================================================================================
+
+do case TriggerControl()
+
+	case ADDRESS_DIST_RELATED_TICKBOX
+		do case ReadControlValue ( ADDRESS_DIST_RELATED_TICKBOX )
+			case 0
+				'---- commented out on 16-10-2007
+				'alter control ADDRESS_PRIMARY_RADIOGROUP value 1
+				alter control ADDRESS_POSITION_RADIOGROUP value 1 disable
+				AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = ""
+				AddressDialogValues ( 1 ) . EASTING = ""
+				AddressDialogValues ( 1 ) . NORTHING = ""
+				AddressDialogValues ( 1 ) . DATUM_PROJ = ""
+			case 1
+				'---- commented out on 16-10-2007
+				'alter control ADDRESS_PRIMARY_RADIOGROUP value 1
+				if not UserEnteredNewPropNum then
+					do case VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG
+						case "Y"
+							alter control ADDRESS_POSITION_RADIOGROUP value 1 enable
+						case "N", ""
+							alter control ADDRESS_POSITION_RADIOGROUP value 2
+					end case
+				else
+					'---- would like to simplify all this by consolidating VicmapAddress and ActionVicmapAddress
+					alter control ADDRESS_POSITION_RADIOGROUP value 2
+				end if
+				AddressDialogValues ( 1 ) . DIST_RELATED_FLAG = "Y"
+		end case
+
+	case ADDRESS_SOURCE_RADIOGROUP
+		call DataSourceToggleHandler
+
+	case ADDRESS_POSITION_RADIOGROUP
+		do case ReadControlValue ( ADDRESS_POSITION_RADIOGROUP )
+			case 1
+				AddressDialogValues ( 1 ) . EASTING = round ( val ( VicmapAddressDetails ( TargetAddressPicklistValue ) . EASTING ) , 1 )
+				AddressDialogValues ( 1 ) . NORTHING = round ( val ( VicmapAddressDetails ( TargetAddressPicklistValue ) . NORTHING ) , 1 )
+				AddressDialogValues ( 1 ) . DATUM_PROJ = VicmapAddressDetails ( TargetAddressPicklistValue ) . DATUM_PROJ
+			case 2
+				AddressDialogValues ( 1 ) . EASTING = round ( M1X , 1 )
+				AddressDialogValues ( 1 ) . NORTHING = round ( M1Y , 1 )
+				AddressDialogValues ( 1 ) . DATUM_PROJ = ActiveCoordSys
+		end case
+
+end case
+
+end sub
+
+
+
+'================================================================================
+sub DataSourceToggleHandler
+'================================================================================
+
+do case ReadControlValue ( ADDRESS_SOURCE_RADIOGROUP )
+	case 1
+		' if rates link has not been established,
+		' then create a dummy blank record in the RatesAddressDetails array
+		if ubound ( RatesAddressDetails ) = 0 then
+			redim RatesAddressDetails ( 1 )
+		end if
+		call PopulateAddressDialogDetails ( RatesAddressDetails ( 1 ) )
+	case 2
+		do case UserEnteredNewPropNum
+			case TRUE	call PopulateAddressDialogDetails ( ActionVicmapAddressDetails ( 1 ) )
+			case FALSE	call PopulateAddressDialogDetails ( VicmapAddressDetails ( TargetAddressPicklistValue ) )
+		end case
+end case
+
+end sub
+
+
+
+
+'================================================================================
+sub PopulateAddressDialogDetails ( InputAddress () as AddressCaptureForm )
+'================================================================================
+
+alter control ADDRESS_SU_TYPE value InputAddress () . SU_TYPE
+alter control ADDRESS_SU_PREFIX_1 value InputAddress () . SU_PREFIX_1
+alter control ADDRESS_SU_NO_1 value InputAddress () . SU_NO_1
+alter control ADDRESS_SU_SUFF_1 value InputAddress () . SU_SUFF_1
+alter control ADDRESS_SU_PREFIX_2 value InputAddress () . SU_PREFIX_2
+alter control ADDRESS_SU_NO_2 value InputAddress () . SU_NO_2
+alter control ADDRESS_SU_SUFF_2 value InputAddress () . SU_SUFF_2
+alter control ADDRESS_FL_TYPE value InputAddress () . FL_TYPE
+alter control ADDRESS_FL_PREFIX_1 value InputAddress () . FL_PREFIX_1
+alter control ADDRESS_FL_NO_1 value InputAddress () . FL_NO_1
+alter control ADDRESS_FL_SUFF_1 value InputAddress () . FL_SUFF_1
+alter control ADDRESS_FL_PREFIX_2 value InputAddress () . FL_PREFIX_2
+alter control ADDRESS_FL_NO_2 value InputAddress () . FL_NO_2
+alter control ADDRESS_FL_SUFF_2 value InputAddress () . FL_SUFF_2
+alter control ADDRESS_PR_NAME_1 value InputAddress () . PR_NAME_1
+alter control ADDRESS_PR_NAME_2 value InputAddress () . PR_NAME_2
+alter control ADDRESS_LOC_DES value InputAddress () . LOC_DES
+alter control ADDRESS_HOUSE_PREFIX_1 value InputAddress () . HOUSE_PREFIX_1
+alter control ADDRESS_HOUSE_NUMBER_1 value InputAddress () . HOUSE_NUMBER_1
+alter control ADDRESS_HOUSE_SUFFIX_1 value InputAddress () . HOUSE_SUFFIX_1
+alter control ADDRESS_HOUSE_PREFIX_2 value InputAddress () . HOUSE_PREFIX_2
+alter control ADDRESS_HOUSE_NUMBER_2 value InputAddress () . HOUSE_NUMBER_2
+alter control ADDRESS_HOUSE_SUFFIX_2 value InputAddress () . HOUSE_SUFFIX_2
+alter control ADDRESS_DISPLAY_PREFIX_1 value InputAddress () . DISPLAY_PREFIX_1
+alter control ADDRESS_DISPLAY_NO_1 value InputAddress () . DISPLAY_NO_1
+alter control ADDRESS_DISPLAY_SUFFIX_1 value InputAddress () . DISPLAY_SUFFIX_1
+alter control ADDRESS_DISPLAY_PREFIX_2 value InputAddress () . DISPLAY_PREFIX_2
+alter control ADDRESS_DISPLAY_NO_2 value InputAddress () . DISPLAY_NO_2
+alter control ADDRESS_DISPLAY_SUFFIX_2 value InputAddress () . DISPLAY_SUFFIX_2
+alter control ADDRESS_STREET_NAME value InputAddress () . STREET_NAME
+alter control ADDRESS_STREET_TYPE value InputAddress () . STREET_TYPE
+alter control ADDRESS_STREET_SUFFIX value InputAddress () . STREET_SUFFIX
+alter control ADDRESS_LOCALITY value InputAddress () . LOCALITY
+alter control ADDRESS_POSTCODE value InputAddress () . POSTCODE
+
+end sub
+
+
+
+'================================================================================
+sub ReadAddressDialogSettingsFromINIFile
+'================================================================================
+
+AddressDialogControl ( 1 ) . SU_TYPE = INIValue ( "DataEntryFields" , "SU_TYPE" )
+AddressDialogControl ( 1 ) . SU_PREFIX_1 = INIValue ( "DataEntryFields" , "SU_PREFIX_1" )
+AddressDialogControl ( 1 ) . SU_NO_1 = INIValue ( "DataEntryFields" , "SU_NO_1" )
+AddressDialogControl ( 1 ) . SU_SUFF_1 = INIValue ( "DataEntryFields" , "SU_SUFF_1" )
+AddressDialogControl ( 1 ) . SU_PREFIX_2 = INIValue ( "DataEntryFields" , "SU_PREFIX_2" )
+AddressDialogControl ( 1 ) . SU_NO_2 = INIValue ( "DataEntryFields" , "SU_NO_2" )
+AddressDialogControl ( 1 ) . SU_SUFF_2 = INIValue ( "DataEntryFields" , "SU_SUFF_2" )
+AddressDialogControl ( 1 ) . FL_TYPE = INIValue ( "DataEntryFields" , "FL_TYPE" )
+AddressDialogControl ( 1 ) . FL_PREFIX_1 = INIValue ( "DataEntryFields" , "FL_PREFIX_1" )
+AddressDialogControl ( 1 ) . FL_NO_1 = INIValue ( "DataEntryFields" , "FL_NO_1" )
+AddressDialogControl ( 1 ) . FL_SUFF_1 = INIValue ( "DataEntryFields" , "FL_SUFF_1" )
+AddressDialogControl ( 1 ) . FL_PREFIX_2 = INIValue ( "DataEntryFields" , "FL_PREFIX_2" )
+AddressDialogControl ( 1 ) . FL_NO_2 = INIValue ( "DataEntryFields" , "FL_NO_2" )
+AddressDialogControl ( 1 ) . FL_SUFF_2 = INIValue ( "DataEntryFields" , "FL_SUFF_2" )
+AddressDialogControl ( 1 ) . PR_NAME_1 = INIValue ( "DataEntryFields" , "PR_NAME_1" )
+AddressDialogControl ( 1 ) . PR_NAME_2 = INIValue ( "DataEntryFields" , "PR_NAME_2" )
+AddressDialogControl ( 1 ) . LOC_DES = INIValue ( "DataEntryFields" , "LOC_DES" )
+AddressDialogControl ( 1 ) . HOUSE_PREFIX_1 = INIValue ( "DataEntryFields" , "HOUSE_PREFIX_1" )
+AddressDialogControl ( 1 ) . HOUSE_NUMBER_1 = INIValue ( "DataEntryFields" , "HOUSE_NUMBER_1" )
+AddressDialogControl ( 1 ) . HOUSE_SUFFIX_1 = INIValue ( "DataEntryFields" , "HOUSE_SUFFIX_1" )
+AddressDialogControl ( 1 ) . HOUSE_PREFIX_2 = INIValue ( "DataEntryFields" , "HOUSE_PREFIX_2" )
+AddressDialogControl ( 1 ) . HOUSE_NUMBER_2 = INIValue ( "DataEntryFields" , "HOUSE_NUMBER_2" )
+AddressDialogControl ( 1 ) . HOUSE_SUFFIX_2 = INIValue ( "DataEntryFields" , "HOUSE_SUFFIX_2" )
+AddressDialogControl ( 1 ) . DISPLAY_PREFIX_1 = INIValue ( "DataEntryFields" , "DISPLAY_PREFIX_1" )
+AddressDialogControl ( 1 ) . DISPLAY_NO_1 = INIValue ( "DataEntryFields" , "DISPLAY_NO_1" )
+AddressDialogControl ( 1 ) . DISPLAY_SUFFIX_1 = INIValue ( "DataEntryFields" , "DISPLAY_SUFFIX_1" )
+AddressDialogControl ( 1 ) . DISPLAY_PREFIX_2 = INIValue ( "DataEntryFields" , "DISPLAY_PREFIX_2" )
+AddressDialogControl ( 1 ) . DISPLAY_NO_2 = INIValue ( "DataEntryFields" , "DISPLAY_NO_2" )
+AddressDialogControl ( 1 ) . DISPLAY_SUFFIX_2 = INIValue ( "DataEntryFields" , "DISPLAY_SUFFIX_2" )
+AddressDialogControl ( 1 ) . STREET_NAME = INIValue ( "DataEntryFields" , "ROAD_NAME" )
+AddressDialogControl ( 1 ) . STREET_TYPE = INIValue ( "DataEntryFields" , "ROAD_TYPE" )
+AddressDialogControl ( 1 ) . STREET_SUFFIX = INIValue ( "DataEntryFields" , "ROAD_SUFFIX" )
+AddressDialogControl ( 1 ) . LOCALITY = INIValue ( "DataEntryFields" , "LOCALITY" )
+AddressDialogControl ( 1 ) . POSTCODE = INIValue ( "DataEntryFields" , "POSTCODE" )
+
+end sub

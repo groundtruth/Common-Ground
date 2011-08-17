@@ -1,0 +1,952 @@
+
+include "Common Ground.DEF"
+
+
+'================================================================================
+sub AuditQueryPropertyNoPropNum
+'================================================================================
+
+do case BasePropEditMode
+	case TRUE
+		select *
+			from VicmapPropertyTable
+			where PROP_PROPNUM = "" and
+				PROP_PROPERTY_TYPE = "O" and
+				PROP_LGA_CODE = LGACode
+			order by PROP_PFI_CREATED desc
+			into Property_NoPropNum noselect
+	case FALSE
+		select *
+			from VicmapPropertyTable
+			where PROP_PROPNUM = "" and
+				PROP_PROPERTY_TYPE = "O" and
+				PROP_LGA_CODE = LGACode and
+				PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+			order by PROP_PFI_CREATED desc
+			into Property_NoPropNum noselect
+end case
+
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryPropertyNoPropNumNonCrown
+'================================================================================
+
+'--- these fields need aliases because they are duplicated between two tables
+dim ParcelPropertyParcelPFI as alias
+dim ParcelPFI as alias
+ParcelPropertyParcelPFI = VicmapParcelPropertyTable + ".PARCEL_PFI"
+ParcelPFI = VicmapParcelTable + ".PARCEL_PFI"
+
+select PROPERTY_PFI
+	from VicmapParcelPropertyTable, VicmapParcelTable
+	where PARCEL_LGA_CODE = LGACode and
+		ParcelPropertyParcelPFI = ParcelPFI and
+		PARCEL_CROWN_STATUS = "" and
+		PARCEL_P_NUMBER = ""
+	group by PROPERTY_PFI
+	into Property_NonCrown_List noselect
+
+do case BasePropEditMode
+	case TRUE
+		select *
+			from VicmapPropertyTable
+			where
+				PROP_PFI in ( select PROPERTY_PFI from Property_NonCrown_List ) and
+				PROP_PROPNUM = "" and
+				PROP_PROPERTY_TYPE = "O"
+			order by PROP_PFI_CREATED desc
+			into Property_NoPropNumNonCrown noselect
+	case FALSE
+		select *
+			from VicmapPropertyTable
+			where
+				PROP_PFI in ( select PROPERTY_PFI from Property_NonCrown_List ) and
+				PROP_PROPNUM = "" and
+				PROP_PROPERTY_TYPE = "O" and
+				PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+			order by PROP_PFI_CREATED desc
+			into Property_NoPropNumNonCrown noselect
+end case
+
+close table Property_NonCrown_List
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryPropertyInvalidPropNum
+'================================================================================
+
+dim QueryString as string
+dim RatesAddressPropNumRef as alias
+
+QueryString = "select * from " + RatesAddressView
+
+'onerror goto SkippingODBCConnction
+
+'if ServerConnectionNumber = 0 then
+'	ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+'end if
+
+'server ServerConnectionNumber link table
+'	QueryString
+'	toolkit "ODBC"
+'	into TempAddressLinkTable
+'	file TempFileName$("")
+'RatesAddressTable = TableInfo ( 0 , 1 )
+'
+'SkippingODBCConnction:
+'
+'' Open up a saved copy of the council's address database instead of an ODBC connection if needed
+'if ODBCConnectionString in ( "" , "?" ) and RatesAddressLinkedTablePath not in ( "" , "?" ) then
+'	if not IsTableOpen ( RatesAddressTable ) or RatesAddressTable in ( "" , "?" ) then
+'		open table RatesAddressLinkedTablePath readonly
+'		RatesAddressTable = TableInfo ( 0 , 1 )
+'	end if
+'end if
+
+if IsTableOpen ( "TempTable1115" ) then
+	drop table TempTable1115
+end if
+
+'---- copied from Verify Button Handler procedure and modified to suit (24th Jan 2007) -------------------------------
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto AfterRefresh
+	if not IsTableOpen ( RatesAddressTable ) or RatesAddressTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressTable = TableInfo ( 0 , 1 )
+		if TableInfo ( RatesAddressTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+			if RefreshLinkedTables then
+				server refresh RatesAddressTable
+			end if
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+'	onerror goto CrashedWhileConnectingToServer
+	'if ServerConnectionNumber = 0 then
+	if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+	end if
+	QueryString = "select * from " + RatesAddressView
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempTable1115
+		file TempFileName$("")
+	RatesAddressTable = TableInfo ( 0 , 1 )
+
+end if
+
+'-------------------------------------------------------------------------------
+
+RatesAddressPropNumRef = RatesAddressTable + ".PROPNUM"
+
+select *
+	from VicmapPropertyTable, RatesAddressTable
+	where PROP_PROPNUM = RatesAddressPropNumRef
+	into ValidPropNum
+
+run menu command M_ANALYZE_INVERTSELECT
+
+select *
+	from Selection
+	where PROP_PROPNUM not in ( "" , "NCPR" ) and PROP_LGA_CODE = LGACode
+	order by PROP_PFI_CREATED desc
+	into Property_InvalidPropNum
+
+'---- delete 'RatesAddress' table if it was a temporary ODBC table
+if ODBCConnectionString not in ( "" , "?" ) and RatesAddressLinkedTablePath in ( "" , "?" ) then
+	drop table RatesAddressTable
+end if
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryPropertyNonContiguous
+'================================================================================
+
+Select
+		PROP_PFI
+'		PROP_PROPNUM,
+'		ObjectInfo ( obj , OBJ_INFO_NPOLYGONS ) "Num_Polygons",
+'		'sqr ( (ObjectGeography(obj,1) - ObjectGeography(obj,3))^2 + (ObjectGeography(obj,2) - ObjectGeography(obj,4))^2 ) "Extent_m",
+'		Area(obj, "hectare") "Area_ha",
+'		Area(mbr(obj), "hectare") "MBR_Area_ha",
+'		Area(mbr(obj), "hectare") / Area(obj, "hectare") "MBR_Area_Ratio"
+'		'( (ObjectGeography(obj,1) - ObjectGeography(obj,3))^2 + (ObjectGeography(obj,2) - ObjectGeography(obj,4))^2 ) / Area(obj, "hectare") "Extent_Ratio"
+
+	from VicmapPropertyTable
+	where val ( str$ ( ObjectInfo ( obj , OBJ_INFO_NPOLYGONS ) ) ) > 1 and
+		Area(mbr(obj), "hectare") /Area(obj, "hectare") > 4 and
+		PROP_PROPNUM not in ( "" , "0" , "NCPR" ) and
+		PROP_LGA_CODE = LGACode
+'	order by MBR_Area_Ratio
+	into Property_NonContiguous_List noselect
+
+select *
+	from VicmapPropertyTable
+	where PROP_PFI in (select PROP_PFI from Property_NonContiguous_List)
+	order by PROP_PFI_CREATED desc
+	into Property_NonContiguous noselect
+
+close table Property_NonContiguous_List
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryParcelNoCrefNo
+'================================================================================
+
+dim ParcelLGACode as alias
+dim ParcelCrefNo as alias
+dim ParcelPFI as alias
+dim ParcelPropertyParcelPFI as alias
+dim ParcelPropertyPropertyPFI as alias
+dim PropertyPFI as alias
+dim PropertyPropNum as alias
+
+ParcelLGACode = VicmapParcelTable + ".PARCEL_LGA_CODE"
+ParcelCrefNo = VicmapParcelTable + ".PARCEL_CREFNO"
+ParcelPFI = VicmapParcelTable + ".PARCEL_PFI"
+ParcelPropertyParcelPFI = VicmapParcelPropertyTable + ".PARCEL_PFI"
+ParcelPropertyPropertyPFI = VicmapParcelPropertyTable + ".PROPERTY_PFI"
+PropertyPFI = VicmapPropertyTable + ".PROP_PFI"
+PropertyPropNum = VicmapPropertyTable + ".PROP_PROPNUM"
+
+select PARCEL_PFI
+	from VicmapParcelTable, VicmapParcelPropertyTable, VicmapPropertyTable
+	where
+		ParcelLGACode = LGACode and
+		ParcelCrefNo = "" and
+		ParcelPFI = ParcelPropertyParcelPFI and
+		ParcelPropertyPropertyPFI = PropertyPFI and
+		PropertyPropNum not in ( "" , "NCPR" )
+	into Parcel_NoCrefNo_List noselect
+
+select *
+	from VicmapParcelTable
+	where PARCEL_PFI in (select PARCEL_PFI from Parcel_NoCrefNo_List)
+	order by PARCEL_PFI_CREATED desc
+	into Parcel_NoCrefNo noselect
+
+close table Parcel_NoCrefNo_List
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryCouncilUnmatchedPropNum
+'================================================================================
+
+dim QueryString as string
+dim RatesAddressAuditTable as string
+
+if IsTableOpen ( "TempTable1311" ) then
+	drop table TempTable1311
+end if
+
+close table PropertyPropNum_List interactive
+
+'---- copied from Verify Button Handler procedure and modified to suit (24th Jan 2007) -------------------------------
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto AfterRefresh
+	if not IsTableOpen ( RatesAddressAuditTable ) or RatesAddressAuditTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressAuditTable = TableInfo ( 0 , 1 )
+		if TableInfo ( RatesAddressAuditTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+			if RefreshLinkedTables then
+				server refresh RatesAddressAuditTable
+			end if
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+	if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+	end if
+	QueryString = "select * from " + RatesAddressView
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempTable1311
+		file TempFileName$("")
+	RatesAddressAuditTable = TableInfo ( 0 , 1 )
+
+end if
+'-------------------------------------------------------------------------------
+
+
+call EnsureFieldIsIndexed ( RatesAddressAuditTable , "PROPNUM" )
+
+onerror goto 0
+
+select PROP_PROPNUM
+	from VicmapPropertyTable
+	where PROP_LGA_CODE = LGACode
+	group by PROP_PROPNUM
+	into PropertyPropNum_List noselect
+
+Commit Table PropertyPropNum_List As TempFolder + "PropertyPropNum_List.TAB"
+close table PropertyPropNum_List
+open table TempFolder + "PropertyPropNum_List.TAB"
+
+Select *
+	from PropertyPropNum_List , RatesAddressAuditTable
+	where PropertyPropNum_List.PROP_PROPNUM = PROPNUM
+	into Selection
+
+run menu command M_ANALYZE_INVERTSELECT
+
+select *
+	from Selection
+	where PROPNUM <> ""
+	group by PROPNUM
+	order by MI_PRINX desc
+	into Council_UnmatchedPropNum noselect
+
+drop table PropertyPropNum_List
+
+exit sub
+
+CrashedWhileConnectingToServer:
+note "Error encountered while attempting to connect to server."
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryAddressDiscrepancy
+'================================================================================
+
+'---- copied from AuditQueryCouncilUnmatchedPropNum procedure and modified to suit
+'---- (27th Mar 2007)
+
+dim QueryString as string
+dim RatesAddressAuditTable as string
+dim RatesAddressAuditTableCopy as string
+
+dim PropertyPFI as alias
+dim PropertyPropNum as alias
+
+dim AddressPropPFI as alias
+dim AddressEziAddress as alias
+dim AddressPrimaryAddress as alias
+dim AddressSubUnitNumber1 as alias
+dim AddressSubUnitSuffix1 as alias
+dim AddressSubUnitNumber2 as alias
+dim AddressSubUnitSuffix2 as alias
+dim AddressHouseNumber1 as alias
+dim AddressHouseSuffix1 as alias
+dim AddressHouseNumber2 as alias
+dim AddressHouseSuffix2 as alias
+dim AddressStreetName as alias
+dim AddressStreetType as alias
+dim AddressStreetSuffix as alias
+dim AddressLocality as alias
+
+dim RatesAddressPropNum as alias
+dim RatesAddressSubUnitNumber1 as alias
+dim RatesAddressSubUnitSuffix1 as alias
+dim RatesAddressSubUnitNumber2 as alias
+dim RatesAddressSubUnitSuffix2 as alias
+dim RatesAddressHouseNumber1 as alias
+dim RatesAddressHouseSuffix1 as alias
+dim RatesAddressHouseNumber2 as alias
+dim RatesAddressHouseSuffix2 as alias
+dim RatesAddressStreetName as alias
+dim RatesAddressStreetType as alias
+dim RatesAddressStreetSuffix as alias
+dim RatesAddressLocality as alias
+
+
+PropertyPFI = VicmapPropertyTable + ".PROP_PFI"
+PropertyPropNum = VicmapPropertyTable + ".PROP_PROPNUM"
+
+AddressPropPFI = VicmapAddressTable + ".PROPERTY_PFI"
+AddressEziAddress = VicmapAddressTable + ".EZI_ADDRESS"
+AddressPrimaryAddress = VicmapAddressTable + ".IS_PRIMARY"
+AddressSubUnitNumber1 = VicmapAddressTable + ".BLG_UNIT_ID_1"
+AddressSubUnitSuffix1 = VicmapAddressTable + ".BLG_UNIT_SUFFIX_1"
+AddressSubUnitNumber2 = VicmapAddressTable + ".BLG_UNIT_ID_2"
+AddressSubUnitSuffix2 = VicmapAddressTable + ".BLG_UNIT_SUFFIX_2"
+AddressHouseNumber1 = VicmapAddressTable + ".HOUSE_NUMBER_1"
+AddressHouseSuffix1 = VicmapAddressTable + ".HOUSE_SUFFIX_1"
+AddressHouseNumber2 = VicmapAddressTable + ".HOUSE_NUMBER_2"
+AddressHouseSuffix2 = VicmapAddressTable + ".HOUSE_SUFFIX_2"
+
+if FieldExists ( VicmapAddressTable , "ROAD_NAME" ) then
+	'**** New Format Vicmap Address
+	AddressStreetName = VicmapAddressTable + ".ROAD_NAME"
+	AddressStreetType = VicmapAddressTable + ".ROAD_TYPE"
+	AddressStreetSuffix = VicmapAddressTable + ".ROAD_SUFFIX"
+end if
+
+if FieldExists ( VicmapAddressTable , "STREET_NAME" ) then
+	'**** Old Format Vicmap Address
+	AddressStreetName = VicmapAddressTable + ".STREET_NAME"
+	AddressStreetType = VicmapAddressTable + ".STREET_TYPE"
+	AddressStreetSuffix = VicmapAddressTable + ".STREET_SUFFIX"
+end if
+
+AddressLocality = VicmapAddressTable + ".LOCALITY_NAME"
+
+
+if IsTableOpen ( "TempTable1411" ) then
+	drop table TempTable1411
+end if
+
+'---- copied from Verify Button Handler procedure and modified to suit (24th Jan 2007) -------------------------------
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto AfterRefresh
+	if not IsTableOpen ( RatesAddressAuditTable ) or RatesAddressAuditTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressAuditTable = TableInfo ( 0 , 1 )
+		if TableInfo ( RatesAddressAuditTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+			if RefreshLinkedTables then
+				server refresh RatesAddressAuditTable
+			end if
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+'	onerror goto CrashedWhileConnectingToServer
+	'if ServerConnectionNumber = 0 then
+	if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+	end if
+	QueryString = "select * from " + RatesAddressView
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempTable1411
+		file TempFileName$("")
+	RatesAddressAuditTable = TableInfo ( 0 , 1 )
+
+end if
+'-------------------------------------------------------------------------------
+
+'---- add dummy fields to Rates Address table if they don't exist so that
+'---- the comparison query runs properly
+if not (
+	FieldExists ( RatesAddressAuditTable , "blg_unit_id_1" ) and
+	FieldExists ( RatesAddressAuditTable , "blg_unit_id_1" ) and
+	FieldExists ( RatesAddressAuditTable , "blg_unit_suffix_1" ) and
+	FieldExists ( RatesAddressAuditTable , "blg_unit_id_2" ) and
+	FieldExists ( RatesAddressAuditTable , "blg_unit_suffix_2" ) and
+	FieldExists ( RatesAddressAuditTable , "house_number_1" ) and
+	FieldExists ( RatesAddressAuditTable , "house_suffix_1" ) and
+	FieldExists ( RatesAddressAuditTable , "house_number_2" ) and
+	FieldExists ( RatesAddressAuditTable , "house_suffix_2" ) and
+	FieldExists ( RatesAddressAuditTable , "street_name" ) and
+	FieldExists ( RatesAddressAuditTable , "street_type" ) and
+	FieldExists ( RatesAddressAuditTable , "street_suffix" ) and
+	FieldExists ( RatesAddressAuditTable , "locality" ) )
+	then
+		RatesAddressAuditTableCopy = TempFileName$("")
+		commit table RatesAddressAuditTable as RatesAddressAuditTableCopy
+		if ServerConnectionNumber = 0 then
+			close table RatesAddressAuditTable
+		else
+			drop table RatesAddressAuditTable
+		end if
+		open table RatesAddressAuditTableCopy
+		RatesAddressAuditTable = TableInfo ( 0 , 1 )
+		'if not FieldExists ( RatesAddressAuditTable , "blg_unit_id_1" ) then alter table RatesAddressAuditTable ( add BLG_UNIT_ID_1 char(10) ) end if
+		'if not FieldExists ( RatesAddressAuditTable , "blg_unit_suffix_1" ) then alter table RatesAddressAuditTable ( add BLG_UNIT_SUFFIX_1 char(10) ) end if
+		'if not FieldExists ( RatesAddressAuditTable , "blg_unit_id_2" ) then alter table RatesAddressAuditTable ( add BLG_UNIT_ID_2 char(10) ) end if
+		'if not FieldExists ( RatesAddressAuditTable , "blg_unit_suffix_2" ) then alter table RatesAddressAuditTable ( add BLG_UNIT_SUFFIX_2 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "su_no_1" ) then alter table RatesAddressAuditTable ( add su_no_1 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "su_suff_1" ) then alter table RatesAddressAuditTable ( add su_suff_1 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "su_no_2" ) then alter table RatesAddressAuditTable ( add su_no_2 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "su_suff_2" ) then alter table RatesAddressAuditTable ( add su_suff_2 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "house_number_1" ) then alter table RatesAddressAuditTable ( add house_number_1 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "house_suffix_1" ) then alter table RatesAddressAuditTable ( add house_suffix_1 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "house_number_2" ) then alter table RatesAddressAuditTable ( add house_number_2 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "house_suffix_2" ) then alter table RatesAddressAuditTable ( add house_suffix_2 char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "street_name" ) then alter table RatesAddressAuditTable ( add street_name char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "street_type" ) then alter table RatesAddressAuditTable ( add street_type char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "street_suffix" ) then alter table RatesAddressAuditTable ( add street_suffix char(10) ) end if
+		if not FieldExists ( RatesAddressAuditTable , "locality" ) then alter table RatesAddressAuditTable ( add locality char(40) ) end if
+end if
+
+'-------------------------------------------------------------------------------
+
+RatesAddressPropNum = RatesAddressAuditTable + ".propnum"
+'RatesAddressSubUnitNumber1 = RatesAddressAuditTable + ".blg_unit_id_1"
+'RatesAddressSubUnitSuffix1 = RatesAddressAuditTable + ".blg_unit_suffix_1"
+'RatesAddressSubUnitNumber2 = RatesAddressAuditTable + ".blg_unit_id_2"
+'RatesAddressSubUnitSuffix2 = RatesAddressAuditTable + ".blg_unit_suffix_2"
+RatesAddressSubUnitNumber1 = RatesAddressAuditTable + ".su_no_1"
+RatesAddressSubUnitSuffix1 = RatesAddressAuditTable + ".su_suff_1"
+RatesAddressSubUnitNumber2 = RatesAddressAuditTable + ".su_no_2"
+RatesAddressSubUnitSuffix2 = RatesAddressAuditTable + ".su_suff_2"
+RatesAddressHouseNumber1 = RatesAddressAuditTable + ".house_number_1"
+RatesAddressHouseSuffix1 = RatesAddressAuditTable + ".house_suffix_1"
+RatesAddressHouseNumber2 = RatesAddressAuditTable + ".house_number_2"
+RatesAddressHouseSuffix2 = RatesAddressAuditTable + ".house_suffix_2"
+RatesAddressStreetName = RatesAddressAuditTable + ".street_name"
+RatesAddressStreetType = RatesAddressAuditTable + ".street_type"
+RatesAddressStreetSuffix = RatesAddressAuditTable + ".street_suffix"
+RatesAddressLocality = RatesAddressAuditTable + ".locality"
+
+create index on RatesAddressAuditTable (PROPNUM)
+
+onerror goto 0
+
+
+'If version of MapInfo is 8.0 or greater, then do complex query.
+'Otherwise, do simpler version that is not as likely to crash.
+'(Ararat and Mildura have problems with 7.5 crashing - query too complex)
+
+if SystemInfo ( SYS_INFO_MIVERSION ) >= 800 then
+
+	select
+			PropertyPropNum "PropertyNumber",
+			left$ ( AddressEziAddress , len ( AddressEziAddress ) - 4 ) "VicmapAddress",
+			DISTANCE_RELATED_FLAG "Dist_Rel",
+			ucase$ ( ltrim$ ( rtrim$ (
+			left$ ( RatesAddressSubUnitNumber1 , 999 * int ( RatesAddressSubUnitNumber1 not in ( "" , "0" ) ) ) +
+			RatesAddressSubUnitSuffix1 +
+			left$ ( "-" + RatesAddressSubUnitNumber2 , 999 * int ( RatesAddressSubUnitNumber2 not in ( "" , "0" ) ) ) +
+			RatesAddressSubUnitSuffix2 +
+			left$ ( "/", 999 * int ( RatesAddressSubUnitNumber1 not in ( "" , "0" ) ) ) +
+			left$ ( RatesAddressHouseNumber1 , 999 * int ( RatesAddressHouseNumber1 not in ( "" , "0" ) ) ) +
+			RatesAddressHouseSuffix1 +
+			left$ ( "-" , 999 * int ( RatesAddressHouseNumber2 not in ( "" , "0" ) ) ) +
+			left$ ( RatesAddressHouseNumber2 , 999 * int ( RatesAddressHouseNumber2 not in ( "" , "0" ) ) ) +
+			RatesAddressHouseSuffix2 +
+			" " +
+			RatesAddressStreetName +
+			rtrim$ ( " " + RatesAddressStreetType ) +
+			rtrim$ ( " " + RatesAddressStreetSuffix ) +
+			rtrim$ ( " " + RatesAddressLocality ) ) ) ) "CouncilAddress"
+		from
+			VicmapAddressTable,
+			VicmapPropertyTable,
+			RatesAddressAuditTable
+		where
+			AddressPrimaryAddress = "Y" and
+			LGA_CODE = LGACode and
+			PROP_STATUS <> "P" and
+			AddressPropPFI = PropertyPFI and
+			PropertyPropNum <> "" and
+			PropertyPropNum = RatesAddressPropNum and (
+				AddressSubUnitNumber1 <> RatesAddressSubUnitNumber1 or
+				AddressSubUnitSuffix1 <> RatesAddressSubUnitSuffix1 or
+				AddressSubUnitNumber2 <> RatesAddressSubUnitNumber2 or
+				AddressSubUnitSuffix2 <> RatesAddressSubUnitSuffix2 or
+				AddressHouseNumber1 <> RatesAddressHouseNumber1 or
+				AddressHouseSuffix1 <> RatesAddressHouseSuffix1 or
+				AddressHouseNumber2 <> RatesAddressHouseNumber2 or
+				AddressHouseSuffix2 <> RatesAddressHouseSuffix2 or
+				FindAndReplaceText ( AddressStreetName , "-" , " " ) <> FindAndReplaceText ( FindAndReplaceText ( RatesAddressStreetName , "-" , " " ) , "'" , "" ) or
+				AddressStreetType <> RatesAddressStreetType or
+				AddressStreetSuffix <> RatesAddressStreetSuffix )
+		order by
+			AddressLocality, AddressStreetName, AddressHouseNumber1 , AddressSubUnitNumber1
+		into
+			Address_Discrepancy noselect
+
+else
+
+	select
+			PropertyPropNum "PropertyNumber",
+			left$ ( AddressEziAddress , len ( AddressEziAddress ) - 4 ) "VicmapAddress",
+			DISTANCE_RELATED_FLAG "Dist_Rel",
+			RatesAddressSubUnitNumber1 ,
+			RatesAddressSubUnitNumber2 ,
+			RatesAddressHouseNumber1 ,
+			RatesAddressHouseSuffix1 ,
+			RatesAddressHouseNumber2 ,
+			RatesAddressHouseSuffix2 ,
+			RatesAddressStreetName ,
+			RatesAddressStreetType ,
+			RatesAddressStreetSuffix ,
+			RatesAddressLocality
+		from VicmapAddressTable, VicmapPropertyTable, RatesAddressAuditTable
+		where AddressPrimaryAddress = "Y" and
+			LGA_CODE = LGACode and
+			PROP_STATUS <> "P" and
+			AddressPropPFI = PropertyPFI and
+			PropertyPropNum <> "" and
+			PropertyPropNum = RatesAddressPropNum and (
+				AddressSubUnitNumber1 <> RatesAddressSubUnitNumber1 or
+				'AddressSubUnitSuffix1 <> RatesAddressSubUnitSuffix1 or
+				'AddressSubUnitNumber2 <> RatesAddressSubUnitNumber2 or
+				'AddressSubUnitSuffix2 <> RatesAddressSubUnitSuffix2 or
+				AddressHouseNumber1 <> RatesAddressHouseNumber1 or
+				AddressHouseSuffix1 <> RatesAddressHouseSuffix1 or
+				AddressHouseNumber2 <> RatesAddressHouseNumber2 or
+				'AddressHouseSuffix2 <> RatesAddressHouseSuffix2 or
+				AddressStreetName <> RatesAddressStreetName or
+				AddressStreetType <> RatesAddressStreetType or
+				AddressStreetSuffix <> RatesAddressStreetSuffix )
+		order by AddressLocality, AddressStreetName, AddressHouseNumber1 , AddressSubUnitNumber1
+		into Address_Discrepancy noselect
+
+end if
+
+exit sub
+
+CrashedWhileConnectingToServer:
+note "Error encountered while attempting to connect to server."
+
+end sub
+
+
+
+'================================================================================
+sub AuditQueryCouncilLocalityDiscrepancy
+'================================================================================
+
+'---- copied from AuditQueryAddressDiscrepancy procedure and modified to suit
+'---- (2nd May 2007)
+
+dim QueryString as string
+dim RatesAddressAuditTable as string
+
+dim PropertyPFI as alias
+dim PropertyPropNum as alias
+dim AddressPropPFI as alias
+dim AddressEziAddress as alias
+dim AddressPrimaryAddress as alias
+dim AddressLocality as alias
+dim RatesAddressPropNum as alias
+dim RatesAddressHouseNumber1 as alias
+dim RatesAddressStreetName as alias
+dim RatesAddressStreetType as alias
+dim RatesAddressLocality as alias
+
+PropertyPFI = VicmapPropertyTable + ".PROP_PFI"
+PropertyPropNum = VicmapPropertyTable + ".PROP_PROPNUM"
+AddressPropPFI = VicmapAddressTable + ".PROPERTY_PFI"
+AddressEziAddress = VicmapAddressTable + ".EZI_ADDRESS"
+AddressPrimaryAddress = VicmapAddressTable + ".IS_PRIMARY"
+AddressLocality = VicmapAddressTable + ".LOCALITY_NAME"
+
+
+
+if IsTableOpen ( "TempTable1313" ) then
+	drop table TempTable1313
+end if
+
+'---- copied from Verify Button Handler procedure and modified to suit (24th Jan 2007) -------------------------------
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto AfterRefresh
+	if not IsTableOpen ( RatesAddressAuditTable ) or RatesAddressAuditTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressAuditTable = TableInfo ( 0 , 1 )
+		if TableInfo ( RatesAddressAuditTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+			if RefreshLinkedTables then
+				server refresh RatesAddressAuditTable
+			end if
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+	'if ServerConnectionNumber = 0 then
+	if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+	end if
+	QueryString = "select * from " + RatesAddressView
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempTable1313
+		file TempFileName$("")
+	RatesAddressAuditTable = TableInfo ( 0 , 1 )
+
+end if
+'-------------------------------------------------------------------------------
+
+RatesAddressPropNum = RatesAddressAuditTable + ".propnum"
+RatesAddressHouseNumber1 = RatesAddressAuditTable + ".house_number_1"
+RatesAddressStreetName = RatesAddressAuditTable + ".street_name"
+RatesAddressStreetType = RatesAddressAuditTable + ".street_type"
+RatesAddressLocality = RatesAddressAuditTable + ".locality"
+
+
+create index on RatesAddressAuditTable (PROPNUM)
+
+onerror goto 0
+
+select
+		PropertyPropNum "PropertyNumber",
+		left$ ( AddressEziAddress , len ( AddressEziAddress ) - 4 ) "VicmapAddress",
+		AddressLocality "VicmapLocality",
+		RatesAddressLocality "CouncilLocality",
+		RatesAddressHouseNumber1 "CouncilHouseNo1",
+		RatesAddressStreetName "CouncilStreetName",
+		RatesAddressStreetType "CouncilStreetType"
+	from VicmapAddressTable, VicmapPropertyTable, RatesAddressAuditTable
+	where AddressPrimaryAddress = "Y" and
+		LGA_CODE = LGACode and
+		PROP_STATUS <> "P" and
+		AddressPropPFI = PropertyPFI and
+		PropertyPropNum <> "" and
+		PropertyPropNum = RatesAddressPropNum and
+		( ( AddressLocality not like "%(%" and AddressLocality <> RatesAddressLocality ) or
+		  ( AddressLocality like "%(%" and Left$ ( AddressLocality , instr ( 1 , AddressLocality , "(" ) - 2 ) <> RatesAddressLocality ) )
+	order by AddressLocality
+	into Council_IncorrectLocality noselect
+
+exit sub
+
+CrashedWhileConnectingToServer:
+note "Error encountered while attempting to connect to server."
+
+end sub
+
+
+
+'================================================================================
+sub ShowMatchStatistics
+'================================================================================
+
+dim QueryString as string
+dim RatesAddressPropNumRef as alias
+dim NumVicmapProps as integer
+dim NumMatchedVicmapProps as integer
+dim NumRatesProps as integer
+dim NumMatchedRatesProps as integer
+dim IncludeCrownLand as logical
+
+dim ParcelPropertyParcelPFI as alias
+dim ParcelPFI as alias
+
+IncludeCrownLand = Ask ( "Do you wish to include Crown Land parcels" + chr$(13) + "when calculating the Vicmap Property" + chr$(13) + "match rate?", "Yes" , "No" )
+
+QueryString = "select * from " + RatesAddressView
+
+if not TablesOpened then call OpenTables end if
+
+ParcelPropertyParcelPFI = VicmapParcelPropertyTable + ".PARCEL_PFI"
+ParcelPFI = VicmapParcelTable + ".PARCEL_PFI"
+
+if IsTableOpen ( "TempMatchStatsTable" ) then
+	drop table TempMatchStatsTable
+end if
+close table TempMatchStatsTable interactive
+
+'---- copied from Verify Button Handler procedure and modified to suit (24th Jan 2007) -------------------------------
+
+if ODBCConnectionString in ( "" , "?" ) then
+	'---- use linked table
+	onerror goto AfterRefresh
+	if not IsTableOpen ( RatesAddressTable ) or RatesAddressTable in ( "" , "?" ) then
+		open table RatesAddressLinkedTablePath readonly
+		RatesAddressTable = TableInfo ( 0 , 1 )
+		if TableInfo ( RatesAddressTable , TAB_INFO_TYPE ) = TAB_TYPE_LINKED then
+			if RefreshLinkedTables then
+				server refresh RatesAddressTable
+			end if
+		end if
+	end if
+	AfterRefresh:
+	onerror goto 0
+
+else
+
+	'---- use direct link
+'	onerror goto CrashedWhileConnectingToServer
+	'if ServerConnectionNumber = 0 then
+	if not IsOBDCConnectionStillOpen ( ServerConnectionNumber ) then
+		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
+	end if
+	QueryString = "select * from " + RatesAddressView
+	server ServerConnectionNumber link table
+		QueryString
+		toolkit "ODBC"
+		into TempMatchStatsTable
+		file TempFolder + "TempMatchStatsTable.TAB"
+	RatesAddressTable = TableInfo ( 0 , 1 )
+
+end if
+
+close table PROPERTY_MP_temp interactive
+close table RatesAddressTable_temp interactive
+
+
+'--------------------------------------------------------------------
+'Vicmap Match
+
+if IncludeCrownLand then
+	select
+			PROP_PROPNUM,
+			PROP_PFI,
+			PROP_STATUS,
+			PROPV_FEATURE_TYPE,
+			PARCEL_PFI,
+			PARCEL_CROWN_STATUS
+		from
+			VicmapPropertyTable,
+			VicmapParcelPropertyTable,
+			VicmapParcelTable
+		where
+			PROP_LGA_CODE = LGACode and
+			PROP_PFI = PROPERTY_PFI and 
+			ParcelPropertyParcelPFI = ParcelPFI and
+			PROP_STATUS = "A" and
+			PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+		group by PROP_PFI
+		into PROPERTY_MP_temp noselect
+else
+	select
+			PROP_PROPNUM,
+			PROP_PFI,
+			PROP_STATUS,
+			PROPV_FEATURE_TYPE,
+			PARCEL_PFI,
+			PARCEL_CROWN_STATUS
+		from
+			VicmapPropertyTable,
+			VicmapParcelPropertyTable,
+			VicmapParcelTable
+		where
+			PROP_LGA_CODE = LGACode and
+			PROP_PFI = PROPERTY_PFI and 
+			ParcelPropertyParcelPFI = ParcelPFI and
+			PROP_STATUS = "A" and
+			PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" ) and
+			Parcel_Crown_Status = ""
+		group by PROP_PFI
+		into PROPERTY_MP_temp noselect
+end if
+
+NumVicmapProps = TableInfo ( PROPERTY_MP_temp , TAB_INFO_NROWS )
+
+add column PROPERTY_MP_temp (Match Char (1))
+	from RatesAddressTable
+	set To "M"
+	Where PROP_PROPNUM = PROPNUM Dynamic
+
+select
+		left$("Matched",int((Match="M" and PROP_PROPNUM<>"") or PROP_PROPNUM="NCPR")*99) +
+			left$("Invalid Match",int(Match<>"M" and PROP_PROPNUM<>"" and PROP_PROPNUM<>"NCPR")*99) +
+			left$("Unmatched",int(PROP_PROPNUM="")*99) "Match_Status",
+		count(*) "Properties"
+	from PROPERTY_MP_temp
+	group by COL1
+	order by COL1 desc
+	into Vicmap_Property_Match_Stats noselect
+
+Select Properties from Vicmap_Property_Match_Stats where Match_Status = "Matched" into TempSelection noselect
+fetch first from TempSelection
+NumMatchedVicmapProps =  TempSelection.Properties
+close table TempSelection
+
+call RestoreFrontWindowIfMaximised
+
+if FileExists ( LocateFile$(LOCATE_GRAPH_DIR) + "Templates\Pie\Pie.3tf" ) then
+
+	graph Match_Status, Properties "Vicmap Match Rate: " + format$ ( NumMatchedVicmapProps/NumVicmapProps*100 , "0.0" ) + "%"
+		from Vicmap_Property_Match_Stats
+		using LocateFile$(LOCATE_GRAPH_DIR) + "Templates\Pie\Pie.3tf"
+
+	set graph
+		Title "Vicmap Property"
+		SubTitle "Property Polygons"
+
+	if IncludeCrownLand then
+		set graph Footnote "excludes 'Base' properties and 'Proposed' properties"
+	else
+		set graph Footnote "excludes Crown Land parcels, 'Base' properties and 'Proposed' properties"
+	end if
+
+else
+
+	browse * from Vicmap_Property_Match_Stats
+
+end if
+
+set window FrontWindow() title "Vicmap Property Match Statistics"
+
+
+'--------------------------------------------------------------------
+'Rates Match
+
+select PROPNUM
+	from RatesAddressTable
+	into RatesAddressTable_temp noselect
+
+NumRatesProps = TableInfo ( RatesAddressTable_temp , TAB_INFO_NROWS )
+
+add Column RatesAddressTable_temp (Match Char (1))
+	from VicmapPropertyTable
+	set to "M"
+	where PROPNUM = PROP_PROPNUM Dynamic
+
+select
+		left$("Matched",int(Match="M")*99) +
+			left$("Unmatched",int(Match<>"M")*99 ) "Match_Status",
+		count(*) "Properties"
+	from RatesAddressTable_temp
+	group by COL1
+	order by COL1 desc
+	into Rates_Match_Stats noselect
+
+Select Properties from Rates_Match_Stats where Match_Status = "Matched" into TempSelection noselect
+fetch first from TempSelection
+NumMatchedRatesProps =  TempSelection.Properties
+close table TempSelection
+
+if FileExists ( LocateFile$(LOCATE_GRAPH_DIR) + "Templates\Pie\Pie.3tf" ) then
+	graph Match_Status, Properties RatesDataSourceAbb + " Match Rate: " + format$ ( NumMatchedRatesProps/NumRatesProps*100 , "0.0" ) + "%"
+		from Rates_Match_Stats
+		using LocateFile$(LOCATE_GRAPH_DIR) + "Templates\Pie\Pie.3tf"
+	set graph
+		Title "Rates System"
+		SubTitle "Property Records"
+		Footnote ""
+else
+	browse * from Rates_Match_Stats
+end if
+
+set window FrontWindow() title "Rates Match Statistics"
+
+
+'---- delete 'RatesAddress' table if it was a temporary ODBC table
+'if ODBCConnectionString not in ( "" , "?" ) and RatesAddressLinkedTablePath in ( "" , "?" ) then
+'	drop table RatesAddressTable
+'end if
+
+end sub
+
+
+
