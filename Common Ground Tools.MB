@@ -2,6 +2,117 @@
 include "Common Ground.DEF"
 
 
+
+'================================================================================
+sub EnsureTableIsFormattedForV12 ( byval InputTable as string )
+'================================================================================
+
+dim M1TableRequiresFieldReordering as logical
+
+if not FieldExists ( InputTable , "lga_code" ) then
+	alter table InputTable ( add lga_code Char(5) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "new_sub" ) then
+	alter table InputTable ( add new_sub Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "address_pfi" ) then
+	alter table InputTable ( add address_pfi Char(10) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "SU_HSA_FLAG" ) then
+	alter table InputTable ( add su_hsa_flag Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "SU_HSA_UNIT_ID" ) then
+	alter table InputTable ( add su_hsa_unit_id Char (10) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "access_type" ) then
+	alter table InputTable ( add access_type Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "new_road" ) then
+	alter table InputTable ( add new_road Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( InputTable , "M1Version" ) then
+	alter table InputTable ( add M1Version Char(5) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if 	M1TableRequiresFieldReordering = "TRUE" then
+	alter table InputTable (
+		order
+			lga_code,
+			new_sub,
+			property_pfi,
+			parcel_pfi,
+			address_pfi,
+			multi_assess,
+			retired_propnum,
+			base_propnum,
+			propnum,
+			crefno,
+			spi,
+			part_p,
+			plan_number,
+			lot_number,
+			allotment,
+			section_p,
+			block_c,
+			portion,
+			subdivision,
+			parish_code,
+			township_code,
+			su_hsa_flag,
+			su_hsa_unit_id,
+			su_type,
+			su_prefix_1,
+			su_no_1,
+			su_suff_1,
+			su_prefix_2,
+			su_no_2,
+			su_suff_2,
+			fl_type,
+			fl_prefix_1,
+			fl_no_1,
+			fl_suff_1,
+			fl_prefix_2,
+			fl_no_2 ,
+			fl_suff_2,
+			pr_name_1,
+			pr_name_2,
+			loc_des,
+			house_prefix_1,
+			house_number_1 ,
+			house_suffix_1 ,
+			house_prefix_2,
+			house_number_2 ,
+			house_suffix_2,
+			display_prefix_1,
+			display_no_1,
+			display_suffix_1,
+			display_prefix_2,
+			display_no_2 ,
+			display_suffix_2,
+			access_type,
+			new_road )
+
+			end if
+
+end sub
+
+
+
 '================================================================================
 sub AddLayerToMap ( byval TableName as string , byval ViewPreference as smallint )
 '================================================================================

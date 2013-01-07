@@ -1,8 +1,8 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2012.12.11a"
+define BuildNum				"2013.01.07a"
 define ApplicationDesc		"Property Data Maintenance System"
-define CopyrightNotice		"Copyright © 2005-2012 Groundtruth"
+define CopyrightNotice		"Copyright © 2005-2013 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
 '=================================================================================
 
@@ -278,6 +278,7 @@ if CommandInfo ( CMD_INFO_DLG_OK ) then
 		if FileExists ( ArchiveTablePath ) then
 			open table ArchiveTablePath
 			ArchiveTable = TableInfo (0,1)
+			call EnsureTableIsFormattedForV12 ( ArchiveTable )
 			insert into ArchiveTable
 				select * from EditsForArchive
 			commit table ArchiveTable
@@ -322,6 +323,7 @@ if FileExists ( ArchiveTablePath ) then
 
 	open table ArchiveTablePath
 	ArchiveTable = TableInfo (0,1)
+	call EnsureTableIsFormattedForV12 ( ArchiveTable )
 
 	select *
 		from ArchiveTable
@@ -459,7 +461,7 @@ dim VicmapPropertySimplifiedFolder as string
 dim VicmapAddressSourceTABFile as string
 dim VicmapAddressDestinationTABFile as string
 
-dim M1TableRequiresFieldReordering as logical
+'dim M1TableRequiresFieldReordering as logical
 
 if not FileExists ( M1TablePath ) then note "M1 table path specified in INI file does not exist." call Exit end if
 if not FileExists ( VicmapParcelTablePath ) then note "Vicmap Parcel table path specified in INI file does not exist." call Exit end if
@@ -549,106 +551,7 @@ if TableInfo ( M1Table , TAB_INFO_READONLY ) then
 	open table CurrentTablePath as M1Table
 end if
 
-'**** Changes for v12
-
-if not FieldExists ( M1Table , "lga_code" ) then
-	alter table M1Table ( add lga_code Char(5) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "new_sub" ) then
-	alter table M1Table ( add new_sub Char(1) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "address_pfi" ) then
-	alter table M1Table ( add address_pfi Char(10) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "SU_HSA_FLAG" ) then
-	alter table M1Table ( add su_hsa_flag Char(1) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "SU_HSA_UNIT_ID" ) then
-	alter table M1Table ( add su_hsa_unit_id Char (10) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "access_type" ) then
-	alter table M1Table ( add access_type Char(1) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "new_road" ) then
-	alter table M1Table ( add new_road Char(1) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if not FieldExists ( M1Table , "M1Version" ) then
-	alter table M1Table ( add M1Version Char(5) )
-	M1TableRequiresFieldReordering = "TRUE"
-end if
-
-if 	M1TableRequiresFieldReordering = "TRUE" then
-	alter table M1Table (
-		order
-			lga_code,
-			new_sub,
-			property_pfi,
-			parcel_pfi,
-			address_pfi,
-			multi_assess,
-			retired_propnum,
-			base_propnum,
-			propnum,
-			crefno,
-			spi,
-			part_p,
-			plan_number,
-			lot_number,
-			allotment,
-			section_p,
-			block_c,
-			portion,
-			subdivision,
-			parish_code,
-			township_code,
-			su_hsa_flag,
-			su_hsa_unit_id,
-			su_type,
-			su_prefix_1,
-			su_no_1,
-			su_suff_1,
-			su_prefix_2,
-			su_no_2,
-			su_suff_2,
-			fl_type,
-			fl_prefix_1,
-			fl_no_1,
-			fl_suff_1,
-			fl_prefix_2,
-			fl_no_2 ,
-			fl_suff_2,
-			pr_name_1,
-			pr_name_2,
-			loc_des,
-			house_prefix_1,
-			house_number_1 ,
-			house_suffix_1 ,
-			house_prefix_2,
-			house_number_2 ,
-			house_suffix_2,
-			display_prefix_1,
-			display_no_1,
-			display_suffix_1,
-			display_prefix_2,
-			display_no_2 ,
-			display_suffix_2,
-			access_type,
-			new_road )
-end if
+call EnsureTableIsFormattedForV12 ( M1Table )
 
 open table VicmapAddressTablePath
 VicmapAddressTable = TableInfo ( 0 , 1 )

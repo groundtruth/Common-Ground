@@ -159,6 +159,7 @@ declare sub LogEvent ( byval EventString as string )
 declare sub RestoreFrontWindowIfMaximised
 declare sub CloseNamedWindow ( byval WindowName as string)
 declare sub SmartAppend ( byval BaseTable as string, byval SuppTable as string, byval SourceFileField as string )
+declare sub EnsureTableIsFormattedForV12 ( byval InputTable as string )
 
 declare function DoesRoadExistInVicmapAddress ( byval RoadNameValue as string , byval RoadTypeValue as string , byval RoadSuffixValue as string ) as logical
 declare function AddressForProperty ( byval PropertyPFIValue as string ) as string

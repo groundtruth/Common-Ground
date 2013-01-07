@@ -1,0 +1,11 @@
+'Dir32.def
+
+declare sub GetDir (
+	sPath as string,
+	sList() as string)
+
+declare sub GetFiles (
+	byval sPath as string, 
+	byval sFilespec as string,
+	sList() as string)
+

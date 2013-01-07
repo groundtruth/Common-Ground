@@ -1,0 +1,102 @@
+'Dir32.mb
+'======================================================================
+'Support functions for retrieving files and directory names
+'Copyright © 1999 by Bill Thoen
+'======================================================================
+include "dir32.def"
+
+define MAX_PATH 260
+define INVALID_HANDLE_VALUE -1
+
+Type FILETIME
+        dwLowDateTime As integer
+        dwHighDateTime As integer
+End Type
+
+Type WIN32_FIND_DATA
+        dwFileAttributes As integer
+        ftCreationTime As FILETIME
+        ftLastAccessTime As FILETIME
+        ftLastWriteTime As FILETIME
+        nFileSizeHigh As integer
+        nFileSizeLow As integer
+        dwReserved0 As integer
+        dwReserved1 As integer
+        cFileName As String * MAX_PATH
+        cAlternate As String * 14
+End Type
+
+Declare Function FindFirstFile Lib "kernel32" 
+	Alias "FindFirstFileA" (
+	ByVal lpFileName As String, 
+	lpFindFileData As WIN32_FIND_DATA) 
+	As integer
+Declare Function FindNextFile Lib "kernel32" 
+	Alias "FindNextFileA" (
+	ByVal hFindFile As integer, 
+	lpFindFileData As WIN32_FIND_DATA) 
+	As integer
+Declare Function FindClose Lib "kernel32" 
+	Alias "FindClose" (
+	ByVal hFindFile As Integer) 
+	As Integer
+
+'======================================================================
+sub GetDir (
+	sPath as string,   'Full drive\directory path
+	sList() as string) 'Array to receive list of directory names
+
+'Returns a list of file names in folder sPath that represent 
+'folders themselves.
+'----------------------------------------------------------------------
+dim hFindFile, nStatus as integer
+dim f as WIN32_FIND_DATA
+dim i, j as integer
+dim sDirPath as string
+
+	sDirPath = sPath
+	if right$ (sDirPath, 1) <> "\" then
+		sDirPath = sDirPath + "\"
+	end if
+		
+	hFindFile = FindFirstFile (sDirPath+"*.*", f)
+	do  
+		if f.dwFileAttributes = 16 then
+			j = j + 1
+			redim sList(j)
+			sList(j) = f.cFilename + "\"
+		end if
+		nStatus = FindNextFile (hFindFile, f)
+	loop while nStatus = 1
+	nStatus = FindClose (hFindFile)
+end sub
+
+
+'======================================================================
+sub GetFiles (
+	byval sPath as string,      'Full directory path
+	byval sFilespec as string,  'A file specification (e.g. *.TAB)
+	sList() as string)          'Array to receive list of file names
+'----------------------------------------------------------------------
+dim hFindFile, nStatus as integer
+dim f as WIN32_FIND_DATA
+dim i as integer
+
+	hFindFile = FindFirstFile (sPath + sFilespec, f)
+	if hFindFile <> INVALID_HANDLE_VALUE then
+		do  
+			i = i + 1
+			redim sList(i)
+			if f.dwFileAttributes = 16 then
+				sList(i) = f.cFilename + "\"
+			else
+				sList(i) = f.cFilename
+			end if
+			nStatus = FindNextFile (hFindFile, f)
+		loop while nStatus = 1
+	end if
+
+	nStatus = FindClose (hFindFile)
+
+end sub
+
