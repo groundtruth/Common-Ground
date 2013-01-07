@@ -10,6 +10,7 @@ include "Dir32.def"
 
 type PropertyCaptureForm
 	PROPERTY_PFI as string
+	LGA_CODE as string
 	MULTI_ASSESS as string
 	RETIRED_PROPNUM as string
 	BASE_PROPNUM as string
@@ -18,6 +19,7 @@ type PropertyCaptureForm
 	STATUS as string
 	PROPERTY_TYPE as string
 	VIEW_FEATURE_TYPE as string
+	PrimaryAddress as string
 	NumParcels as integer
 '	NumAddresses as integer
 	NumPendingM1s as integer
@@ -28,6 +30,7 @@ type ParcelCaptureForm
 	CREFNO as string
 	SPI as string
 	PART as string
+	LGA_CODE as string
 	PLAN_NUMBER as string
 	LOT_NUMBER as string
 	ALLOTMENT as string
@@ -42,6 +45,8 @@ end type
 
 type AddressCaptureForm
 	PFI as string
+	SU_HSA_FLAG as string
+	SU_HSA_UNIT_ID as string
 	SU_TYPE as string
 	SU_PREFIX_1 as string
 	SU_NO_1 as string
@@ -65,17 +70,18 @@ type AddressCaptureForm
 	HOUSE_PREFIX_2 as string
 	HOUSE_NUMBER_2 as string
 	HOUSE_SUFFIX_2 as string
-	DISPLAY_PREFIX_1 as string
-	DISPLAY_NO_1 as string
-	DISPLAY_SUFFIX_1 as string
-	DISPLAY_PREFIX_2 as string
-	DISPLAY_NO_2 as string
-	DISPLAY_SUFFIX_2 as string
+	' DISPLAY_PREFIX_1 as string
+	' DISPLAY_NO_1 as string
+	' DISPLAY_SUFFIX_1 as string
+	' DISPLAY_PREFIX_2 as string
+	' DISPLAY_NO_2 as string
+	' DISPLAY_SUFFIX_2 as string
 	STREET_NAME as string
 	STREET_TYPE as string
 	STREET_SUFFIX as string
 	LOCALITY as string
-	POSTCODE as string
+	LGA_CODE as string
+	' POSTCODE as string
 	DIST_RELATED_FLAG as string
 	PRIMARY as string
 	EASTING as string
@@ -154,6 +160,8 @@ declare sub RestoreFrontWindowIfMaximised
 declare sub CloseNamedWindow ( byval WindowName as string)
 declare sub SmartAppend ( byval BaseTable as string, byval SuppTable as string, byval SourceFileField as string )
 
+declare function DoesRoadExistInVicmapAddress ( byval RoadNameValue as string , byval RoadTypeValue as string , byval RoadSuffixValue as string ) as logical
+declare function AddressForProperty ( byval PropertyPFIValue as string ) as string
 declare function NumParcelsInProperty ( byval PropertyPFIValue as string ) as integer
 declare function NumAddressesInProperty ( byval PropertyPFIValue as string ) as integer
 declare function NumPendingM1sInProperty ( byval PropertyPFIValue as string ) as integer
@@ -192,18 +200,13 @@ declare function AutoEditCode (
 	byval ActionAddress as integer ,
 	byval ActionCrefNo as integer ) as string
 
-'declare function IsAdditionalZapRecordRequired (
-'	byval TargetAddressPrimary as string ,
-'	byval TargetAddressDistRel as string ,
-'	byval ActionAddress as integer ) as logical
-
-declare function IsAdditionalZapRecordRequired (
-	byval CurrentEditCode as string ,
-	byval TargetParcelPFI as string ,
-	byval TargetAddressPFI as string ,
-	byval TargetAddressPrimary as string ,
-	byval TargetAddressDistRel as string ,
-	byval ActionAddress as integer ) as logical
+' declare function IsAdditionalZapRecordRequired (
+	' byval CurrentEditCode as string ,
+	' byval TargetParcelPFI as string ,
+	' byval TargetAddressPFI as string ,
+	' byval TargetAddressPrimary as string ,
+	' byval TargetAddressDistRel as string ,
+	' byval ActionAddress as integer ) as logical
 
 '---------------------------------------------------------------------------------
 declare sub SelChangedHandler
@@ -464,6 +467,8 @@ declare function GetFileTime lib "kernel32.dll" (
 '---------------------------------------------------------------------------------
 ' Address Dialog Control IDs
 
+define ADDRESS_SU_HSA_FLAG 741
+define ADDRESS_SU_HSA_UNIT_ID 742
 define ADDRESS_SU_TYPE 701
 define ADDRESS_SU_PREFIX_1 702
 define ADDRESS_SU_NO_1 703
@@ -497,8 +502,10 @@ define ADDRESS_STREET_NAME 730
 define ADDRESS_STREET_TYPE 731
 define ADDRESS_STREET_SUFFIX 732
 define ADDRESS_LOCALITY 733
-define ADDRESS_POSTCODE 734
+'define ADDRESS_POSTCODE 734
 
+define ADDRESS_LABEL_SU_HSA_FLAG 841
+define ADDRESS_LABEL_SU_HSA_UNIT_ID 842
 define ADDRESS_LABEL_SU_TYPE 801
 define ADDRESS_LABEL_SU_PREFIX_1 802
 define ADDRESS_LABEL_SU_NO_1 803
@@ -532,7 +539,7 @@ define ADDRESS_LABEL_STREET_NAME 830
 define ADDRESS_LABEL_STREET_TYPE 831
 define ADDRESS_LABEL_STREET_SUFFIX 832
 define ADDRESS_LABEL_LOCALITY 833
-define ADDRESS_LABEL_POSTCODE 834
+'define ADDRESS_LABEL_POSTCODE 834
 
 
 

@@ -1,10 +1,12 @@
-'=================================================================================
+' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2010.07.20"
+define BuildNum				"2012.12.11a"
 define ApplicationDesc		"Property Data Maintenance System"
-define CopyrightNotice		"Copyright © 2005-2010 Groundtruth Mapping Systems"
+define CopyrightNotice		"Copyright © 2005-2012 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
 '=================================================================================
+
+define M1VersionNum	"12"
 
 include "Common Ground.DEF"
 
@@ -129,6 +131,8 @@ create menu "&Archive" as
 create menu "&Common Ground" as
 	"&View Layer" as "&View Layer",
 	"&Search..." calling SearchMap,
+	"(-",
+	"&Index Tables" calling OpenTables,
 	"(-",
 	"&Data Audit" as "&Data Audit",
 	"Show Match Statistics..." calling ShowMatchStatistics,
@@ -455,6 +459,7 @@ dim VicmapPropertySimplifiedFolder as string
 dim VicmapAddressSourceTABFile as string
 dim VicmapAddressDestinationTABFile as string
 
+dim M1TableRequiresFieldReordering as logical
 
 if not FileExists ( M1TablePath ) then note "M1 table path specified in INI file does not exist." call Exit end if
 if not FileExists ( VicmapParcelTablePath ) then note "Vicmap Parcel table path specified in INI file does not exist." call Exit end if
@@ -529,13 +534,120 @@ if not TablesOpened then
 
 end if
 
-open table M1TablePath
-M1Table = TableInfo ( 0 ,1 )
+'**** new for 29 Dec 2012 - introduced extra check here to possibly prevent M1 table getting opened twice, as it seems to be happening at Monash
+if IsTableOpen ( "M1" ) then
+    M1Table = "M1"
+else
+	open table M1TablePath
+	M1Table = TableInfo ( 0 ,1 )
+end if
+
 'ensure table is open for write access
 CurrentTablePath = TableInfo ( M1Table , TAB_INFO_TABFILE )
 if TableInfo ( M1Table , TAB_INFO_READONLY ) then
 	close table TableInfo ( M1Table ,1 )
 	open table CurrentTablePath as M1Table
+end if
+
+'**** Changes for v12
+
+if not FieldExists ( M1Table , "lga_code" ) then
+	alter table M1Table ( add lga_code Char(5) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "new_sub" ) then
+	alter table M1Table ( add new_sub Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "address_pfi" ) then
+	alter table M1Table ( add address_pfi Char(10) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "SU_HSA_FLAG" ) then
+	alter table M1Table ( add su_hsa_flag Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "SU_HSA_UNIT_ID" ) then
+	alter table M1Table ( add su_hsa_unit_id Char (10) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "access_type" ) then
+	alter table M1Table ( add access_type Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "new_road" ) then
+	alter table M1Table ( add new_road Char(1) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if not FieldExists ( M1Table , "M1Version" ) then
+	alter table M1Table ( add M1Version Char(5) )
+	M1TableRequiresFieldReordering = "TRUE"
+end if
+
+if 	M1TableRequiresFieldReordering = "TRUE" then
+	alter table M1Table (
+		order
+			lga_code,
+			new_sub,
+			property_pfi,
+			parcel_pfi,
+			address_pfi,
+			multi_assess,
+			retired_propnum,
+			base_propnum,
+			propnum,
+			crefno,
+			spi,
+			part_p,
+			plan_number,
+			lot_number,
+			allotment,
+			section_p,
+			block_c,
+			portion,
+			subdivision,
+			parish_code,
+			township_code,
+			su_hsa_flag,
+			su_hsa_unit_id,
+			su_type,
+			su_prefix_1,
+			su_no_1,
+			su_suff_1,
+			su_prefix_2,
+			su_no_2,
+			su_suff_2,
+			fl_type,
+			fl_prefix_1,
+			fl_no_1,
+			fl_suff_1,
+			fl_prefix_2,
+			fl_no_2 ,
+			fl_suff_2,
+			pr_name_1,
+			pr_name_2,
+			loc_des,
+			house_prefix_1,
+			house_number_1 ,
+			house_suffix_1 ,
+			house_prefix_2,
+			house_number_2 ,
+			house_suffix_2,
+			display_prefix_1,
+			display_no_1,
+			display_suffix_1,
+			display_prefix_2,
+			display_no_2 ,
+			display_suffix_2,
+			access_type,
+			new_road )
 end if
 
 open table VicmapAddressTablePath
@@ -934,6 +1046,14 @@ insert into M1Table ( obj )
 M1NewRowID = TableInfo ( M1Table , TAB_INFO_NROWS )
 select * from M1Table where rowid = M1NewRowID into M1CurrentRecord noselect
 
+'---- LGA_CODE
+update M1CurrentRecord set LGA_CODE = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . LGA_CODE
+
+'---- NEW_SUB
+if VicmapParcelDetails ( TargetParcelPicklistValue ) . STATUS = "P" then
+	update M1CurrentRecord set NEW_SUB = "Y"
+end if
+
 '---- EDIT_CODE
 CurrentEditCode = 	AutoEditCode (
 	VicmapPropertyDetails ( TargetPropertyPicklistValue ) . MULTI_ASSESS,
@@ -946,8 +1066,9 @@ CurrentEditCode = 	AutoEditCode (
 update M1CurrentRecord set EDIT_CODE = CurrentEditCode
 
 '---- PROPERTY_PFI
-if CurrentEditCode in ( "E" , "P" , "S" , "T" , "Z" ) or
-		CurrentEditCode in ( "A" , "R" ) and TargetExtentPicklistValue <> EXTENT_THIS_PARCEL then
+'if CurrentEditCode in ( "E" , "P" , "S" , "T" , "Z" ) or
+'		CurrentEditCode in ( "A" , "R" ) and TargetExtentPicklistValue <> EXTENT_THIS_PARCEL then
+if TargetExtentPicklistValue = EXTENT_WHOLE_PROPERTY and CurrentEditCode <> "C" then
 	update M1CurrentRecord set PROPERTY_PFI = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI
 end if
 
@@ -956,14 +1077,23 @@ end if
 'if CurrentEditCode in ( "E" , "P" , "T" ) or
 
 '**** Modified 2009-04-09 - Yarra Ranges pointed out that Parcel_PFI for 'add multi' should not be populated
-if CurrentEditCode <> "A" then
-	if CurrentEditCode = "T" or
-			UserInputCREFNO <> "" or
-			ActionCrefNoPicklistValue in ( CREFNO_MODIFY , CREFNO_REMOVE ) or
-			( ActionPropNumPicklistValue in ( PROPNUM_ADD , PROPNUM_REMOVE ) and TargetExtentPicklistValue = EXTENT_THIS_PARCEL ) or
-			VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels = 1 then
-		update M1CurrentRecord set PARCEL_PFI = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI
-	end if
+' if CurrentEditCode <> "A" then
+	' if CurrentEditCode = "T" or
+			' UserInputCREFNO <> "" or
+			' ActionCrefNoPicklistValue in ( CREFNO_MODIFY , CREFNO_REMOVE ) or
+			' ( ActionPropNumPicklistValue in ( PROPNUM_ADD , PROPNUM_REMOVE ) and TargetExtentPicklistValue = EXTENT_THIS_PARCEL ) or
+			' VicmapPropertyDetails ( TargetPropertyPicklistValue ) . NumParcels = 1 then
+		' update M1CurrentRecord set PARCEL_PFI = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI
+	' end if
+' end if
+if TargetExtentPicklistValue = EXTENT_THIS_PARCEL or ActionCrefNoPicklistValue in ( CREFNO_MODIFY , CREFNO_REMOVE ) then
+	update M1CurrentRecord set PARCEL_PFI = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI
+end if
+
+'---- ADDRESS_PFI
+'**** Excluding address_pfi from 'A' and 'P' records, adding secondary addresses, and anything less than a whole property - there could be other scenarios that require the address_pfi to be excluded
+if CurrentEditCode not in ( "A" , "C" , "P" ) and TargetExtentPicklistValue = EXTENT_WHOLE_PROPERTY and ActionAddressPicklistValue <> ADDRESS_ADD then
+	update M1CurrentRecord set ADDRESS_PFI = VicmapAddressDetails ( TargetAddressPicklistValue ) . PFI
 end if
 
 '---- RETIRED_PROPNUM
@@ -972,7 +1102,9 @@ if CurrentEditCode = "R" or ( UserInputPropertyNumber <> VicmapPropertyDetails (
 end if
 
 '---- PROPNUM
-update M1CurrentRecord set PROPNUM = UserInputPropertyNumber
+if CurrentEditCode <> "C" then
+	update M1CurrentRecord set PROPNUM = UserInputPropertyNumber
+end if
 
 '---- CREFNO
 'if CurrentEditCode <> "S" then
@@ -985,42 +1117,27 @@ end if
 if CurrentEditCode not in ( "S" , "Z" ) then
 	if TargetExtentPicklistValue = EXTENT_THIS_PARCEL or ubound ( ExtentPicklistArray ) = 1 then
 		update M1CurrentRecord set SPI = VicmapParcelDetails ( TargetParcelPicklistValue ) . SPI
-		update M1CurrentRecord set PART_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . PART
+		'update M1CurrentRecord set PART_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . PART
 		update M1CurrentRecord set PLAN_NUMBER = VicmapParcelDetails ( TargetParcelPicklistValue ) . PLAN_NUMBER
 		update M1CurrentRecord set LOT_NUMBER = VicmapParcelDetails ( TargetParcelPicklistValue ) . LOT_NUMBER
-		update M1CurrentRecord set ALLOTMENT = VicmapParcelDetails ( TargetParcelPicklistValue ) . ALLOTMENT
-		update M1CurrentRecord set SECTION_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . SECTION
-		update M1CurrentRecord set BLOCK_C = VicmapParcelDetails ( TargetParcelPicklistValue ) . BLOCK
-		update M1CurrentRecord set PORTION = VicmapParcelDetails ( TargetParcelPicklistValue ) . PORTION
-		update M1CurrentRecord set SUBDIVISION = VicmapParcelDetails ( TargetParcelPicklistValue ) . SUBDIVISION
-		update M1CurrentRecord set PARISH_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARISH_CODE
-		update M1CurrentRecord set TOWNSHIP_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . TOWNSHIP_CODE
-	end if
+		'update M1CurrentRecord set ALLOTMENT = VicmapParcelDetails ( TargetParcelPicklistValue ) . ALLOTMENT
+		'update M1CurrentRecord set SECTION_P = VicmapParcelDetails ( TargetParcelPicklistValue ) . SECTION
+		'update M1CurrentRecord set BLOCK_C = VicmapParcelDetails ( TargetParcelPicklistValue ) . BLOCK
+		'update M1CurrentRecord set PORTION = VicmapParcelDetails ( TargetParcelPicklistValue ) . PORTION
+		'update M1CurrentRecord set SUBDIVISION = VicmapParcelDetails ( TargetParcelPicklistValue ) . SUBDIVISION
+		'update M1CurrentRecord set PARISH_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . PARISH_CODE
+		'update M1CurrentRecord set TOWNSHIP_CODE = VicmapParcelDetails ( TargetParcelPicklistValue ) . TOWNSHIP_CODE
+		end if
 end if
 
-'call PopulateRatesAddressDetails ( UserInputPropertyNumber )
-
-'---- Address Details
-'---- old code; replaced on 15-01-2007
-'if CurrentEditCode in ( "E" , "S" , "A" ) or ( CurrentEditCode = "T" and ActionAddressPicklistValue = ADDRESS_MODIFY ) then
-'	if UserInteractedWithAddress then
-'		call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , AddressDialogValues ( 1 ) )
-'	else
-'		if ubound ( RatesAddressDetails ) > 0 then
-'			call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , RatesAddressDetails ( 1 ) )
-'		end if
-'	end if
-'end if
-'
-'if CurrentEditCode = "Z" then
-'	call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , VicmapAddressDetails ( TargetAddressPicklistValue ) )
-'end if
 
 '---- Address Details
 if CurrentEditCode = "Z" then
 	call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , VicmapAddressDetails ( TargetAddressPicklistValue ) )
 else
-	if ActionAddressPicklistValue <> ADDRESS_REMOVE then
+	'**** v12 - added an exclusion for ADDRESS_NO_ACTION because I can't quite think of why we'd ever populate the address if the user specified 'no action' - I could be wrong
+	'if ActionAddressPicklistValue <> ADDRESS_REMOVE then
+	if ActionAddressPicklistValue not in ( ADDRESS_REMOVE , ADDRESS_NO_ACTION ) then
 		if CurrentEditCode in ( "E" , "S" , "A" ) or ( CurrentEditCode = "T" and ActionAddressPicklistValue = ADDRESS_MODIFY ) then
 			if UserInteractedWithAddress then
 				call UpdateRecordFromAddressArray ( M1CurrentRecord , 1 , AddressDialogValues ( 1 ) )
@@ -1032,6 +1149,17 @@ else
 		end if
 	end if
 end if
+
+
+'---- NEW_ROAD
+' this query won't work because it needs field aliases - I'll revisit this later
+' select *
+	' from	M1CurrentRecord, VicmapAddressTable
+	' where	M1CurrentRecord . STREET_NAME = VicmapAddressTable . ROAD_NAME
+	' into 	AddressQuery noselect
+' if TableInfo ( AddressQuery , TAB_INFO_NROWS ) = 0 then
+	' update M1CurrentRecord set NEW_ROAD = "Y"
+' end if
 
 
 '---- Address Primary/Secondary Details
@@ -1055,88 +1183,14 @@ end if
 
 '---- M1 'Admin' Details
 update M1CurrentRecord set M1Status = "Recorded"
-if FieldExists ( M1CurrentRecord , "DateRecorded" ) then
-	update M1CurrentRecord set DateRecorded = CurDate()
-end if
-if FieldExists ( M1CurrentRecord , "TimeRecorded" ) then
-	update M1CurrentRecord set TimeRecorded = str$(Time(24))
-end if
-if FieldExists ( M1CurrentRecord , "RecordedBy" ) then
-	update M1CurrentRecord set RecordedBy = WindowsUserName()
-end if
+update M1CurrentRecord set DateRecorded = CurDate()
+update M1CurrentRecord set TimeRecorded = str$(Time(24))
+update M1CurrentRecord set RecordedBy = WindowsUserName()
+update M1CurrentRecord set M1Version = M1VersionNum
 
 '---- display info results of updated M1 fields
 if ShowEditSummary then
 	call DisplayRecordSummary ( M1Table , TableInfo ( M1Table , TAB_INFO_NROWS ) )
-end if
-
-if IsAdditionalZapRecordRequired (
-	CurrentEditCode,
-	VicmapParcelDetails ( TargetParcelPicklistValue ) . PARCEL_PFI,
-	VicmapAddressDetails ( TargetAddressPicklistValue ) . PFI,
-	VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY,
-	VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG,
-	ActionAddressPicklistValue ) then
-
-'if ActionAddressPicklistValue = ADDRESS_MODIFY and
-'	( VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY = "N" or
-'		VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG = "Y" ) then
-
-		insert into M1Table (
-				PROPERTY_PFI ,
-				PROPNUM ,
-				SU_PREFIX_1,
-				SU_NO_1,
-				SU_SUFF_1,
-				SU_PREFIX_2,
-				SU_NO_2,
-				SU_SUFF_2,
-				HOUSE_PREFIX_1,
-				HOUSE_NUMBER_1,
-				HOUSE_SUFFIX_1,
-				HOUSE_PREFIX_2,
-				HOUSE_NUMBER_2,
-				HOUSE_SUFFIX_2,
-				STREET_NAME,
-				STREET_TYPE,
-				STREET_SUFFIX,
-				LOCALITY,
-				POSTCODE,
-				DIST_RELATED_FLAG ,
-				PRIMARY ,
-				EDIT_CODE ,
-				DateRecorded ,
-				TimeRecorded ,
-				RecordedBy ,
-				M1Status )
-			values (
-				VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI,
-				'UserInputPropertyNumber ,
-				VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM ,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_PREFIX_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_NO_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_SUFF_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_PREFIX_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_NO_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . SU_SUFF_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_PREFIX_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_NUMBER_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_SUFFIX_1,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_PREFIX_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_NUMBER_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . HOUSE_SUFFIX_2,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_NAME,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_TYPE,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . STREET_SUFFIX,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . LOCALITY,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . POSTCODE,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . DIST_RELATED_FLAG,
-				VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY,
-				"Z" ,
-				CurDate() ,
-				str$(Time(24)) ,
-				WindowsUserName() ,
-				"Recorded" )
 end if
 
 commit table M1Table interactive
@@ -1167,93 +1221,6 @@ Err:
 	set map redraw on
 
 end sub
-
-
-
-''================================================================================
-'sub GenerateM1
-''================================================================================
-'
-'dim M1SpreadsheetFolder as string
-'dim M1FilePrefix as string
-'dim M1SpreadsheetName as string
-'dim M1SpreadsheetPath as string
-'
-'' populate M1Table variable for if 'OpenTables' sub has not yet been run
-'open table M1TablePath
-'M1Table = TableInfo ( 0 , 1 )
-'
-'if TableInfo ( M1Table , TAB_INFO_EDITED ) then
-'	if Ask ( "Save changes to M1 table?" , "Save" , "Cancel" ) then
-'		commit table M1Table
-'	else
-'		exit sub
-'	end if
-'end if
-'
-'M1SpreadsheetFolder = INIValue ( "EditFiles" , "OutputFolder" )
-'M1FilePrefix = INIValue ( "EditFiles" , "OutputFilePrefix" )
-'M1SpreadsheetName = AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix )
-'
-'select *
-'	from M1Table
-'	where M1Status = "Recorded"
-'	into NewM1Records noselect
-'
-'if TableInfo ( NewM1Records , TAB_INFO_NROWS ) = 0 then
-'	note "No new records with which to generate an M1."
-'	exit sub
-'end if
-'
-'if M1SpreadsheetPath = "" then
-'	exit sub
-'end if
-'
-'if Ask ( "Will you be submitting this M1?" + chr$(10) + chr$(10) + "(If 'Yes', Common Ground will update the" + chr$(10) + "status of all current edits to 'Submitted'.)", "Yes" , "No" ) then
-'	update NewM1Records set M1Status = "Submitted"
-'	update NewM1Records set M1Form = M1SpreadsheetName
-'	select * from NewM1Records where obj into NewM1RecordsWithObjects noselect
-'	set style symbol MakeFontSymbol (35,16750640,12,"MapInfo Symbols",16,0)
-'	set coordsys table M1Table
-'	update NewM1RecordsWithObjects set obj = CreatePoint ( CentroidX (obj) , CentroidY (obj) )
-'	close table NewM1RecordsWithObjects
-'end if
-'
-'commit table M1Table
-'
-'select
-'	COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
-'	from NewM1Records
-'	into M1SpreadsheetOutput noselect
-'
-''if LGACode = "301" then
-''	export M1SpreadsheetOutput
-''		into M1SpreadsheetPath
-''		type "DBF"
-''		charset "WindowsLatin1"
-''		overwrite
-''else
-'	export M1SpreadsheetOutput
-'		into M1SpreadsheetPath
-'		type "ASCII"
-'		charset "WindowsLatin1"
-'		titles
-'		overwrite
-''end if
-'
-'close table M1SpreadsheetOutput
-'close table NewM1Records
-'
-''if Ask ( "M1 generated and saved to:" + chr$(10) + M1SpreadsheetPath + chr$(10) + chr$(10) + "Do you wish to view the M1 spreadsheet?" , "Yes" , "No" ) then
-'if Ask ( "M1 generated and saved to:" + chr$(10) + PathToDirectory$ ( M1SpreadsheetPath ) + chr$(10) + M1SpreadsheetName + chr$(10) + chr$(10) + "Do you wish to view the M1 spreadsheet?" , "Yes" , "No" ) then
-'	if SpreadsheetAppPath() <> "" then
-'		run program """" & SpreadsheetAppPath() & """" & " " & """" & M1SpreadsheetPath & """"
-'	else
-'		note "Could not launch spreadsheet application."
-'	end if
-'end if
-'
-'end sub
 
 
 
@@ -1292,7 +1259,7 @@ M1SpreadsheetName = AutoSpreadsheetName ( M1SpreadsheetFolder , M1FilePrefix , "
 
 select *
 	from M1Table
-	where M1Status = "Recorded"
+	where M1Status = "Recorded" and M1Version = M1VersionNum
 	into NewM1Records noselect
 
 if TableInfo ( NewM1Records , TAB_INFO_NROWS ) = 0 then
@@ -1321,37 +1288,37 @@ dialog
 		title "Update the status of these edits to 'Submitted'"
 		value TRUE
 		into UpdateStatus
+'	control GroupBox
+'		position 10, 75
+'		width 220 height 45
+'		title "Spreadsheet Format"
+'	control RadioGroup
+'		position 20, 90
+'		title "CSV (recommended);DBF (for exporting non-standard property numbers)"
+'		value 1
+'		into SpreadsheetFormat
 	control GroupBox
-		position 10, 75
-		width 220 height 45
-		title "Spreadsheet Format"
-	control RadioGroup
-		position 20, 90
-		title "XLS (recommended);DBF (for exporting non-standard property numbers)"
-		value 1
-		into SpreadsheetFormat
-	control GroupBox
-		position 10, 125
+		position 10, 125 - 50
 		width 220 height 65
 		title "Spreadsheet File"
 	control StaticText
-		position 20, 140
+		position 20, 140 - 50
 		title "Folder:"
 	control StaticText
-		position 50, 140
+		position 50, 140 - 50
 		title left$ ( M1SpreadsheetFolder , 45 ) + left$ ( "..." , 99 * int ( len (M1SpreadsheetFolder ) > 45 ) )
 	control StaticText
-		position 20, 155
+		position 20, 155 - 50
 		title "File:"
 	control EditText
 		id SPREADSHEET_NAME_EDITTEXT
-		position 50, 155
+		position 50, 155 - 50
 		width 170
 		value M1SpreadsheetName
 		into M1SpreadsheetName
 	control CheckBox
 		id VIEW_SPREADSHEET_CHECKBOX
-		position 20, 170
+		position 20, 170 - 50
 		title "View Spreadsheet"
 		value TRUE
 		into ViewSpreadsheet
@@ -1370,12 +1337,112 @@ end if
 
 do case UserFilter
 	case 1
-		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+'		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+		select
+				lga_code,
+				new_sub,
+				property_pfi,
+				parcel_pfi,
+				address_pfi,
+				spi,
+				plan_number,
+				lot_number,
+				base_propnum,
+				propnum,
+				crefno,
+				su_hsa_flag "hsa_flag",
+				su_hsa_unit_id "hsa_unit_id",
+				su_type "blg_unit_type",
+				su_prefix_1 "blg_unit_prefix_1",
+				su_no_1 "blg_unit_id_1",
+				su_suff_1 "blg_unit_suffix_1",
+				su_prefix_2 "blg_unit_prefix_2",
+				su_no_2 "blg_unit_id_2",
+				su_suff_2 "blg_unit_suffix_2",
+				fl_type "floor_type",
+				fl_prefix_1 "floor_prefix_1",
+				fl_no_1 "floor_no_1",
+				fl_suff_1 "floor_suffix_1",
+				fl_prefix_2 "floor_prefix_2",
+				fl_no_2 "floor_no_2",
+				fl_suff_2 "floor_suffix_2",
+				pr_name_1 "building_name",
+				pr_name_2 "complex_name",
+				loc_des "location_descriptor",
+				house_prefix_1,
+				house_number_1,
+				house_suffix_1,
+				house_prefix_2 ,
+				house_number_2,
+				house_suffix_2,
+				access_type,
+				new_road,
+				street_name "road_name",
+				street_type "road_type",
+				street_suffix "road_suffix",
+				locality "locality_name",
+				dist_related_flag "distance_related_flag",
+				primary "is_primary",
+				easting,
+				northing,
+				datum_proj,
+				outside_property,
+				edit_code
 			from NewM1Records
 			into M1SpreadsheetOutput noselect
 		select * from NewM1Records into RecordsToUpdate noselect
 	case 2
-		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+'		select COL1,COL2,COL3,COL4,COL5,COL6,COL7,COL8,COL9,COL10,COL11,COL12,COL13,COL14,COL15,COL16,COL17,COL18,COL19,COL20,COL21,COL22,COL23,COL24,COL25,COL26,COL27,COL28,COL29,COL30,COL31,COL32,COL33,COL34,COL35,COL36,COL37,COL38,COL39,COL40,COL41,COL42,COL43,COL44,COL45,COL46,COL47,COL48,COL49,COL50,COL51,COL52,COL53,COL54,COL55,COL56,COL57,COL58,COL59,COL60
+		select
+				lga_code,
+				new_sub,
+				property_pfi,
+				parcel_pfi,
+				address_pfi,
+				spi,
+				plan_number,
+				lot_number,
+				base_propnum,
+				propnum,
+				crefno,
+				su_hsa_flag "hsa_flag",
+				su_hsa_unit_id "hsa_unit_id",
+				su_type "blg_unit_type",
+				su_prefix_1 "blg_unit_prefix_1",
+				su_no_1 "blg_unit_id_1",
+				su_suff_1 "blg_unit_suffix_1",
+				su_prefix_2 "blg_unit_prefix_2",
+				su_no_2 "blg_unit_id_2",
+				su_suff_2 "blg_unit_suffix_2",
+				fl_type "floor_type",
+				fl_prefix_1 "floor_prefix_1",
+				fl_no_1 "floor_no_1",
+				fl_suff_1 "floor_suffix_1",
+				fl_prefix_2 "floor_prefix_2",
+				fl_no_2 "floor_no_2",
+				fl_suff_2 "floor_suffix_2",
+				pr_name_1 "building_name",
+				pr_name_2 "complex_name",
+				loc_des "location_descriptor",
+				house_prefix_1,
+				house_number_1,
+				house_suffix_1,
+				house_prefix_2 ,
+				house_number_2,
+				house_suffix_2,
+				access_type,
+				new_road,
+				street_name "road_name",
+				street_type "road_type",
+				street_suffix "road_suffix",
+				locality "locality_name",
+				dist_related_flag "distance_related_flag",
+				primary "is_primary",
+				easting,
+				northing,
+				datum_proj,
+				outside_property,
+				edit_code
 			from NewM1Records
 			where RecordedBy = WindowsUserName()
 			into M1SpreadsheetOutput noselect
@@ -1393,24 +1460,26 @@ if UpdateStatus then
 	commit table M1Table
 end if
 
-do case SpreadsheetFormat
-	case 1
+'**** In v12, we taking away XLS and DBF, and only allowing CSV
+' do case SpreadsheetFormat
+	' case 1
 		M1SpreadsheetPath = M1SpreadsheetFolder + M1SpreadsheetName
 		export M1SpreadsheetOutput
 			into M1SpreadsheetPath
 			type "ASCII"
+			delimiter ","
 			charset "WindowsLatin1"
 			titles
 			overwrite
-	case 2
-		M1SpreadsheetPath = M1SpreadsheetFolder + left$ ( M1SpreadsheetName , len ( M1SpreadsheetName ) - 4 ) + ".dbf"
-		export M1SpreadsheetOutput
-			into M1SpreadsheetPath
-			type "DBF"
-			charset "WindowsLatin1"
-			'overwrite
-			note "Remember to go 'Save As' in Excel, and change the file type to XLS" + chr$(13) + "to convert the DBF file into a standard Excel spreadsheet."
-end case
+	' case 2
+		' M1SpreadsheetPath = M1SpreadsheetFolder + left$ ( M1SpreadsheetName , len ( M1SpreadsheetName ) - 4 ) + ".dbf"
+		' export M1SpreadsheetOutput
+			' into M1SpreadsheetPath
+			' type "DBF"
+			' charset "WindowsLatin1"
+			' 'overwrite
+			' note "Remember to go 'Save As' in Excel, and change the file type to XLS" + chr$(13) + "to convert the DBF file into a standard Excel spreadsheet."
+' end case
 
 close table M1SpreadsheetOutput
 close table NewM1Records
@@ -2095,14 +2164,6 @@ if IsMapWindowOpen() then
 			editable off
 			selectable off
 			global line (1,2,0)
-			'global pen (1,2,16748688)
-			'global brush (39,16748688)
-			'global symbol (35,16748688,20,"MapInfo Symbols",288,0)
-			'---- changed 2007-11-15, Mildura - made layer style more bold
-			'global pen (2,2,16711680)
-			'global brush (7,16711680)
-			'global symbol (37,16711680,20,"MapInfo Symbols",288,0)
-			'---- changed 2008-05-12, Moreland - made line style thicker with no fill
 			global pen (4,2,16711680)
 			global brush (1,16777215)
 			global symbol (41,16711680,24,"MapInfo Symbols",289,0)

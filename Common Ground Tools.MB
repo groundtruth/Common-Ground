@@ -39,10 +39,6 @@ do case ViewPreference
 				    Global Pen (1,2,0)  Brush (1,16777215,16777215)  Symbol (31,0,12)  Line (1,2,0)  Font ("Arial",0,8,0)
 				    Zoom (0, 25) Units "km"
 				    Label Position Center Font ("Arial",257,9,255,16777215) Pen (1,2,0)
-				    	'With Left$(BLG_UNIT_ID_1+"/", 99*Int(BLG_UNIT_ID_1 <> all("", "0")))+HOUSE_PREFIX_1+HOUSE_NUMBER_1+HOUSE_SUFFIX_1+Left$("-"+HOUSE_NUMBER_2, 99*Int(HOUSE_NUMBER_2 <> all("", "0")))
-				    	'With Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1)
-				    	'With Left$( Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1) , 99*int(HOUSE_NUMBER_1<>""))
-						'updated 2007-04-13 - this can be simplified once Common Ground is made to change the house number field to character
 				    	With Left$(Left$(EZI_ADDRESS, InStr(1, EZI_ADDRESS, " ")-1), 99*Int(Str$(HOUSE_NUMBER_1) <> all("", "0")))
 				    	Auto On Overlap On Duplicates On PartialSegments On Max 96 Visibility Zoom (0, 25) Units "km"
 				    	Visibility On
@@ -153,9 +149,21 @@ dim i as integer
 dim ThisFileNum as integer
 dim LatestFileNum as integer
 
+'**** Populate the variable LatestFileNum with the value of the highest number found in any xls file
 call GetFiles ( FolderName , "*.xls", FileList )
 NumFiles = ubound ( FileList )
+for i = 1 to NumFiles
+	if FileList(i) like "#%" then
+		ThisFileNum = val ( mid$ ( FileList(i) , 2 , 3 ) )
+		if ThisFileNum > LatestFileNum then
+			LatestFileNum = ThisFileNum
+		end if
+	end if	
+next
 
+'**** Populate the variable LatestFileNum with the value of the highest number found in any csv file
+call GetFiles ( FolderName , "*.csv", FileList )
+NumFiles = ubound ( FileList )
 for i = 1 to NumFiles
 	if FileList(i) like "#%" then
 		ThisFileNum = val ( mid$ ( FileList(i) , 2 , 3 ) )
@@ -186,8 +194,8 @@ AutoSpreadsheetName =
 	"_M1_" +
 	Year ( CurDate () ) + "-" + Format$ ( Month ( CurDate () ) , "00" ) + "-" + Format$ ( Day ( CurDate () ) , "00" ) + "_" +
 	UserName +
-	"old" +
-	".xls"
+	"v12" +
+	".csv"
 
 end function
 
@@ -220,14 +228,20 @@ end if
 
 '---- EDIT CODE 'T'    Transfer a parcel out of a multi-parcel property
 'if TargetExtent = EXTENT_THIS_PARCEL and ActionPropNum = PROPNUM_MODIFY then
-if TargetExtent = EXTENT_THIS_PARCEL and ActionPropNum in ( PROPNUM_MODIFY , PROPNUM_REMOVE ) then
-	CodeValue = "T"
-	goto FinalVerdict
-end if
+' if TargetExtent = EXTENT_THIS_PARCEL and ActionPropNum in ( PROPNUM_MODIFY , PROPNUM_REMOVE ) then
+	' CodeValue = "T"
+	' goto FinalVerdict
+' end if
 
 '---- EDIT CODE 'E'    Update Everything
 if ActionAddress = ADDRESS_MODIFY and ( ActionPropNum = PROPNUM_MODIFY or ActionCrefNo = CREFNO_MODIFY ) then
 	CodeValue = "E"
+	goto FinalVerdict
+end if
+
+'---- EDIT CODE 'C'
+if ActionPropNum = PROPNUM_NO_ACTION and ActionAddress = ADDRESS_NO_ACTION and ActionCrefNo in ( CREFNO_MODIFY , CREFNO_REMOVE ) then
+	CodeValue = "C"
 	goto FinalVerdict
 end if
 
@@ -237,8 +251,9 @@ if ActionAddress = ADDRESS_NO_ACTION and ( ActionPropNum = PROPNUM_MODIFY or Act
 	goto FinalVerdict
 end if
 
-'---- EDIT CODE 'Z'    Retire a Rural (or Urban Secondary) Address
-if ActionAddress = ADDRESS_REMOVE and ( TargetAddressDistRel = "Y" or TargetAddressPrimary = "N" ) then
+'---- EDIT CODE 'Z'    Retire a Secondary Address
+'if ActionAddress = ADDRESS_REMOVE and ( TargetAddressDistRel = "Y" or TargetAddressPrimary = "N" ) then
+if ActionAddress = ADDRESS_REMOVE and TargetAddressPrimary = "N" then
 	CodeValue = "Z"
 	goto FinalVerdict
 end if  	
@@ -259,51 +274,51 @@ end function
 
 
 
-'================================================================================
-function IsAdditionalZapRecordRequired (
-	byval CurrentEditCode as string ,
-	byval TargetParcelPFI as string ,
-	byval TargetAddressPFI as string ,
-	byval TargetAddressPrimary as string ,
-	byval TargetAddressDistRel as string ,
-	byval ActionAddress as integer ) as logical
-'================================================================================
+' '================================================================================
+' function IsAdditionalZapRecordRequired (
+	' byval CurrentEditCode as string ,
+	' byval TargetParcelPFI as string ,
+	' byval TargetAddressPFI as string ,
+	' byval TargetAddressPrimary as string ,
+	' byval TargetAddressDistRel as string ,
+	' byval ActionAddress as integer ) as logical
+' '================================================================================
 
-dim Check1 as logical
-dim Check2 as logical
+' dim Check1 as logical
+' dim Check2 as logical
 
-dim ParcelObject as alias
-dim AddressObject as alias
+' dim ParcelObject as alias
+' dim AddressObject as alias
 
-if ActionAddress = ADDRESS_MODIFY and ( TargetAddressPrimary = "N" or TargetAddressDistRel = "Y" ) then
+' if ActionAddress = ADDRESS_MODIFY and ( TargetAddressPrimary = "N" or TargetAddressDistRel = "Y" ) then
 
-	Check1 = TRUE
+	' Check1 = TRUE
 
-	if CurrentEditCode = "T" then
-		ParcelObject = VicmapParcelTable + ".obj"
-		AddressObject = VicmapAddressTable + ".obj"
-		select *
-			from VicmapParcelTable, VicmapAddressTable
-			where PARCEL_PFI = TargetParcelPFI and
-				ParcelObject contains AddressObject and
-				PFI = TargetAddressPFI
-			into TempSelection noselect
-		if TableInfo ( TempSelection , TAB_INFO_NROWS ) > 0 then
-			Check2 = TRUE
-		end if
-		close table TempSelection
-	else
-		Check2 = TRUE
-	end if
+	' if CurrentEditCode = "T" then
+		' ParcelObject = VicmapParcelTable + ".obj"
+		' AddressObject = VicmapAddressTable + ".obj"
+		' select *
+			' from VicmapParcelTable, VicmapAddressTable
+			' where PARCEL_PFI = TargetParcelPFI and
+				' ParcelObject contains AddressObject and
+				' PFI = TargetAddressPFI
+			' into TempSelection noselect
+		' if TableInfo ( TempSelection , TAB_INFO_NROWS ) > 0 then
+			' Check2 = TRUE
+		' end if
+		' close table TempSelection
+	' else
+		' Check2 = TRUE
+	' end if
 
-end if
+' end if
 
 
-if Check1 and Check2 then
-	IsAdditionalZapRecordRequired = TRUE
-end if
+' if Check1 and Check2 then
+	' IsAdditionalZapRecordRequired = TRUE
+' end if
 
-end function
+' end function
 
 
 
@@ -331,6 +346,8 @@ end sub
 sub UpdateRecordFromAddressArray ( byval TableName as string , byval RowNum as integer , AddressArray ( ) as AddressCaptureForm )
 '================================================================================
 
+update TableName set SU_HSA_FLAG = ucase$ ( AddressArray ( ) . SU_HSA_FLAG ) where RowID = RowNum
+update TableName set SU_HSA_UNIT_ID = ucase$ ( AddressArray ( ) . SU_HSA_UNIT_ID ) where RowID = RowNum
 update TableName set SU_TYPE = ucase$ ( AddressArray ( ) . SU_TYPE ) where RowID = RowNum
 update TableName set SU_PREFIX_1 = ucase$ ( AddressArray ( ) . SU_PREFIX_1 ) where RowID = RowNum
 update TableName set SU_NO_1 = ucase$ ( AddressArray ( ) . SU_NO_1 ) where RowID = RowNum
@@ -354,17 +371,10 @@ update TableName set HOUSE_SUFFIX_1 = ucase$ ( AddressArray ( ) . HOUSE_SUFFIX_1
 update TableName set HOUSE_PREFIX_2 = ucase$ ( AddressArray ( ) . HOUSE_PREFIX_2 ) where RowID = RowNum
 update TableName set HOUSE_NUMBER_2 = ucase$ ( AddressArray ( ) . HOUSE_NUMBER_2 ) where RowID = RowNum
 update TableName set HOUSE_SUFFIX_2 = ucase$ ( AddressArray ( ) . HOUSE_SUFFIX_2 ) where RowID = RowNum
-update TableName set DISPLAY_PREFIX_1 = ucase$ ( AddressArray ( ) . DISPLAY_PREFIX_1 ) where RowID = RowNum
-update TableName set DISPLAY_NO_1 = ucase$ ( AddressArray ( ) . DISPLAY_NO_1 ) where RowID = RowNum
-update TableName set DISPLAY_SUFFIX_1 = ucase$ ( AddressArray ( ) . DISPLAY_SUFFIX_1 ) where RowID = RowNum
-update TableName set DISPLAY_PREFIX_2 = ucase$ ( AddressArray ( ) . DISPLAY_PREFIX_2 ) where RowID = RowNum
-update TableName set DISPLAY_NO_2 = ucase$ ( AddressArray ( ) . DISPLAY_NO_2 ) where RowID = RowNum
-update TableName set DISPLAY_SUFFIX_2 = ucase$ ( AddressArray ( ) . DISPLAY_SUFFIX_2 ) where RowID = RowNum
 update TableName set STREET_NAME = ucase$ ( AddressArray ( ) . STREET_NAME ) where RowID = RowNum
 update TableName set STREET_TYPE = ucase$ ( AddressArray ( ) . STREET_TYPE ) where RowID = RowNum
 update TableName set STREET_SUFFIX = ucase$ ( AddressArray ( ) . STREET_SUFFIX ) where RowID = RowNum
 update TableName set LOCALITY = ucase$ ( AddressArray ( ) . LOCALITY ) where RowID = RowNum
-update TableName set POSTCODE = ucase$ ( AddressArray ( ) . POSTCODE ) where RowID = RowNum
 
 update TableName set DIST_RELATED_FLAG = ucase$ ( AddressArray ( ) . DIST_RELATED_FLAG ) where RowID = RowNum
 update TableName set PRIMARY = ucase$ ( AddressArray ( ) . PRIMARY ) where RowID = RowNum
@@ -390,6 +400,10 @@ fetch rec RowNum from TableName
 do case TableName
 
 	case RatesAddressQuery
+		FieldAlias = TableName + ".SU_HSA_FLAG"
+		AddressArray ( ) . SU_HSA_FLAG = FieldAlias
+		FieldAlias = TableName + ".SU_HSA_UNIT_ID"
+		AddressArray ( ) . SU_HSA_UNIT_ID = FieldAlias
 		FieldAlias = TableName + ".SU_TYPE"
 		AddressArray ( ) . SU_TYPE = FieldAlias
 		FieldAlias = TableName + ".SU_PREFIX_1"
@@ -436,18 +450,6 @@ do case TableName
 		AddressArray ( ) . HOUSE_NUMBER_2 = FieldAlias
 		FieldAlias = TableName + ".HOUSE_SUFFIX_2"
 		AddressArray ( ) . HOUSE_SUFFIX_2 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_PREFIX_1"
-		AddressArray ( ) . DISPLAY_PREFIX_1 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_NO_1"
-		AddressArray ( ) . DISPLAY_NO_1 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_SUFFIX_1"
-		AddressArray ( ) . DISPLAY_SUFFIX_1 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_PREFIX_2"
-		AddressArray ( ) . DISPLAY_PREFIX_2 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_NO_2"
-		AddressArray ( ) . DISPLAY_NO_2 = FieldAlias
-		FieldAlias = TableName + ".DISPLAY_SUFFIX_2"
-		AddressArray ( ) . DISPLAY_SUFFIX_2 = FieldAlias
 		FieldAlias = TableName + ".STREET_NAME"
 		AddressArray ( ) . STREET_NAME = FieldAlias
 		FieldAlias = TableName + ".STREET_TYPE"
@@ -456,8 +458,6 @@ do case TableName
 		AddressArray ( ) . STREET_SUFFIX = FieldAlias
 		FieldAlias = TableName + ".LOCALITY"
 		AddressArray ( ) . LOCALITY = FieldAlias
-		FieldAlias = TableName + ".POSTCODE"
-		AddressArray ( ) . POSTCODE = FieldAlias
 		FieldAlias = TableName + ".PRIMARY"
 		AddressArray ( ) . PRIMARY = FieldAlias
 		FieldAlias = TableName + ".DIST_RELATED_FLAG"
@@ -466,6 +466,10 @@ do case TableName
 		AddressArray ( ) . OUTSIDE_PROPERTY = FieldAlias
 
 	case VicmapAddressQuery
+		FieldAlias = TableName + ".SU_HSA_FLAG"
+		AddressArray ( ) . SU_HSA_FLAG = FieldAlias
+		FieldAlias = TableName + ".SU_HSA_UNIT_ID"
+		AddressArray ( ) . SU_HSA_UNIT_ID = FieldAlias
 		FieldAlias = TableName + ".BLG_UNIT_TYPE"
 		AddressArray ( ) . SU_TYPE = FieldAlias
 		FieldAlias = TableName + ".BLG_UNIT_PREFIX_1"
@@ -512,18 +516,6 @@ do case TableName
 		AddressArray ( ) . HOUSE_NUMBER_2 = FieldAlias
 		FieldAlias = TableName + ".HOUSE_SUFFIX_2"
 		AddressArray ( ) . HOUSE_SUFFIX_2 = FieldAlias
-		FieldAlias = TableName + ".DISP_PREFIX_1"
-		AddressArray ( ) . DISPLAY_PREFIX_1 = FieldAlias
-		FieldAlias = TableName + ".DISP_NUMBER_1"
-		AddressArray ( ) . DISPLAY_NO_1 = FieldAlias
-		FieldAlias = TableName + ".DISP_SUFFIX_1"
-		AddressArray ( ) . DISPLAY_SUFFIX_1 = FieldAlias
-		FieldAlias = TableName + ".DISP_PREFIX_2"
-		AddressArray ( ) . DISPLAY_PREFIX_2 = FieldAlias
-		FieldAlias = TableName + ".DISP_NUMBER_2"
-		AddressArray ( ) . DISPLAY_NO_2 = FieldAlias
-		FieldAlias = TableName + ".DISP_SUFFIX_2"
-		AddressArray ( ) . DISPLAY_SUFFIX_2 = FieldAlias
 		FieldAlias = TableName + ".STREET_NAME"
 		AddressArray ( ) . STREET_NAME = FieldAlias
 		FieldAlias = TableName + ".STREET_TYPE"
@@ -532,8 +524,6 @@ do case TableName
 		AddressArray ( ) . STREET_SUFFIX = FieldAlias
 		FieldAlias = TableName + ".LOCALITY_NAME"
 		AddressArray ( ) . LOCALITY = FieldAlias
-		FieldAlias = TableName + ".POSTCODE"
-		AddressArray ( ) . POSTCODE = FieldAlias
 		FieldAlias = TableName + ".IS_PRIMARY"
 		AddressArray ( ) . PRIMARY = FieldAlias
 		FieldAlias = TableName + ".DISTANCE_RELATED_FLAG"
@@ -559,6 +549,10 @@ function AddressMatch ( InputAddress1 () as AddressCaptureForm , InputAddress2 (
 dim MatchStatus as logical
 MatchStatus = TRUE
 
+'**** disabling this because I thinnk it would have flagged a mismatch seeing as the Rates value would be blank and the Vicmap value would be 'N'
+'if InputAddress1().SU_HSA_FLAG <> InputAddress2().SU_HSA_FLAG then MatchStatus = FALSE end if
+
+if InputAddress1().SU_HSA_UNIT_ID <> InputAddress2().SU_HSA_UNIT_ID then MatchStatus = FALSE end if
 if left$(InputAddress1().SU_TYPE,1) <> left$(InputAddress2().SU_TYPE,1) then MatchStatus = FALSE end if
 if InputAddress1().SU_PREFIX_1 <> InputAddress2().SU_PREFIX_1 then MatchStatus = FALSE end if
 if InputAddress1().SU_NO_1 <> InputAddress2().SU_NO_1 then MatchStatus = FALSE end if
@@ -582,12 +576,12 @@ if InputAddress1().HOUSE_SUFFIX_1 <> InputAddress2().HOUSE_SUFFIX_1 then MatchSt
 if InputAddress1().HOUSE_PREFIX_2 <> InputAddress2().HOUSE_PREFIX_2 then MatchStatus = FALSE end if
 if InputAddress1().HOUSE_NUMBER_2 <> InputAddress2().HOUSE_NUMBER_2 then MatchStatus = FALSE end if
 if InputAddress1().HOUSE_SUFFIX_2 <> InputAddress2().HOUSE_SUFFIX_2 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_PREFIX_1 <> InputAddress2().DISPLAY_PREFIX_1 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_NO_1 <> InputAddress2().DISPLAY_NO_1 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_SUFFIX_1 <> InputAddress2().DISPLAY_SUFFIX_1 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_PREFIX_2 <> InputAddress2().DISPLAY_PREFIX_2 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_NO_2 <> InputAddress2().DISPLAY_NO_2 then MatchStatus = FALSE end if
-if InputAddress1().DISPLAY_SUFFIX_2 <> InputAddress2().DISPLAY_SUFFIX_2 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_PREFIX_1 <> InputAddress2().DISPLAY_PREFIX_1 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_NO_1 <> InputAddress2().DISPLAY_NO_1 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_SUFFIX_1 <> InputAddress2().DISPLAY_SUFFIX_1 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_PREFIX_2 <> InputAddress2().DISPLAY_PREFIX_2 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_NO_2 <> InputAddress2().DISPLAY_NO_2 then MatchStatus = FALSE end if
+' if InputAddress1().DISPLAY_SUFFIX_2 <> InputAddress2().DISPLAY_SUFFIX_2 then MatchStatus = FALSE end if
 if InputAddress1().STREET_NAME <> InputAddress2().STREET_NAME then MatchStatus = FALSE end if
 if InputAddress1().STREET_TYPE <> InputAddress2().STREET_TYPE then MatchStatus = FALSE end if
 if InputAddress1().STREET_SUFFIX <> InputAddress2().STREET_SUFFIX then MatchStatus = FALSE end if
@@ -1023,6 +1017,20 @@ if FileExists("C:\Program Files\OpenOffice.org 3.9\program\scalc.exe") then Spre
 if FileExists("C:\Program Files\OpenOffice.org 4\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 4\program\scalc.exe" end if
 if FileExists("C:\Program Files\OpenOffice.org 4.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\OpenOffice.org 4.0\program\scalc.exe" end if
 
+if FileExists("C:\Program Files\LibreOffice 3.5\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\LibreOffice 3.5\program\scalc.exe" end if
+if FileExists("C:\Program Files\LibreOffice 3.6\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files)\LibreOffice 3.6\program\scalc.exe" end if
+if FileExists("C:\Program Files\LibreOffice 3.7\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\LibreOffice 3.7\program\scalc.exe" end if
+if FileExists("C:\Program Files\LibreOffice 3.8\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\LibreOffice 3.8\program\scalc.exe" end if
+if FileExists("C:\Program Files\LibreOffice 3.9\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\LibreOffice 3.9\program\scalc.exe" end if
+if FileExists("C:\Program Files\LibreOffice 4.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files\LibreOffice 4.0\program\scalc.exe" end if
+
+if FileExists("C:\Program Files (x86)\LibreOffice 3.5\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 3.5\program\scalc.exe" end if
+if FileExists("C:\Program Files (x86)\LibreOffice 3.6\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 3.6\program\scalc.exe" end if
+if FileExists("C:\Program Files (x86)\LibreOffice 3.7\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 3.7\program\scalc.exe" end if
+if FileExists("C:\Program Files (x86)\LibreOffice 3.8\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 3.8\program\scalc.exe" end if
+if FileExists("C:\Program Files (x86)\LibreOffice 3.9\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 3.9\program\scalc.exe" end if
+if FileExists("C:\Program Files (x86)\LibreOffice 4.0\program\scalc.exe") then SpreadsheetAppPath = "C:\Program Files (x86)\LibreOffice 4.0\program\scalc.exe" end if
+
 if FileExists("C:\Program Files\Microsoft Office\Office\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office\EXCEL.EXE" end if
 if FileExists("C:\Program Files\Microsoft Office\Office10\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office10\EXCEL.EXE" end if
 if FileExists("C:\Program Files\Microsoft Office\Office11\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office11\EXCEL.EXE" end if
@@ -1035,6 +1043,18 @@ if FileExists("C:\Program Files\Microsoft Office\Office17\EXCEL.EXE") then Sprea
 if FileExists("C:\Program Files\Microsoft Office\Office18\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office18\EXCEL.EXE" end if
 if FileExists("C:\Program Files\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office19\EXCEL.EXE" end if
 if FileExists("C:\Program Files\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office20\EXCEL.EXE" end if
+
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office10\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office10\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office11\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office11\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office12\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office12\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office13\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office13\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office14\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office15\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office15\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office16\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office16\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office17\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office17\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office18\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office18\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office19\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office20\EXCEL.EXE" end if
 
 end function
 
@@ -1060,19 +1080,11 @@ end function
 
 
 '=================================================================================
-'function DatasetSupplyDate ( byval TableFromDataset as string ) as date
 function DatasetSupplyDate ( byval XMLFile as string ) as date
 '=================================================================================
 
 dim DateString as string
-'dim PackingSlipPath as string
 
-'old format
-'PackingSlipPath = PathToDirectory$ ( TableFromDataset ) + "packing_slip.xml"
-'DateString = right$ ( InBetweenTextFromFile ( PackingSlipPath , "TIME_DATA_SUPPLIED" , "</param-value>" ) , 10 )
-
-'new format
-'PackingSlipPath = PathToDirectory$ ( TableFromDataset ) + XMLFile
 DateString = InBetweenTextFromFile ( XMLFile , "PRODUCT published_date=""" , " " )
 
 DatasetSupplyDate = left$(DateString,4) + mid$(DateString,6,2) + right$(DateString,2)
@@ -1324,8 +1336,12 @@ else
 	WebAddress = "http://" + URL
 end if
 
-if FileExists ( "C:\Program Files\Mozilla Firefox\firefox.exe" ) then
+if FileExists ( GetFolderPath$(28) + "\Google\Chrome\Application\chrome.exe" ) then
+	Browser = GetFolderPath$(28) + "\Google\Chrome\Application\chrome.exe"
+elseif FileExists ( "C:\Program Files\Mozilla Firefox\firefox.exe" ) then
 	Browser = "C:\Program Files\Mozilla Firefox\firefox.exe"
+elseif FileExists ( "C:\Program Files (x86)\Mozilla Firefox\firefox.exe" ) then
+	Browser = "C:\Program Files (x86)\Mozilla Firefox\firefox.exe"
 elseif FileExists ( "C:\Program Files\Internet Explorer\iexplore.exe" ) then
 	Browser = "C:\Program Files\Internet Explorer\iexplore.exe"
 end if

@@ -262,7 +262,7 @@ end case
 alter control ACTION_ADDRESS_POPUP disable
 
 ' open up a saved copy of the council's address database instead of an ODBC connection if needed
-if ODBCConnectionString in ( "" , "?" ) and RatesAddressLinkedTablePath not in ( "" , "?" ) then
+if ODBCConnectionString in ( "" , "?" ) and RatesAddressLinkedTablePath not in ( "" , "?" ) and FileExists ( RatesAddressLinkedTablePath ) then
 	if not IsTableOpen ( RatesAddressTable ) or RatesAddressTable in ( "" , "?" ) then
 		open table RatesAddressLinkedTablePath readonly
 		RatesAddressTable = TableInfo ( 0 , 1 )
@@ -283,16 +283,25 @@ sub ActionPropNumVerifyButtonHandler
 dim QueryString as string
 
 dim ActionPropNumValue as string
-ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
-if ActionPropNumValue = "" then
-	exit sub
-end if
 
+ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
+
+if ActionPropNumValue = "" then
+	'**** v12: don't exit sub; instead, validate the property number, alter controls, carry on
+	' exit sub
+	IsPropNumVerified = TRUE
+	alter control ACTION_PROPNUM_EDITTEXT disable
+	alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
+	alter control ACTION_ADDRESS_POPUP enable value ADDRESS_MODIFY
+	goto NCPR
+end if
+			
 if ActionPropNumValue = "NCPR" then
 	IsPropNumVerified = TRUE
 	alter control ACTION_PROPNUM_EDITTEXT disable
 	alter control ACTION_PROPNUM_EDITTEXT value "NCPR"    '---- force it to upper case
 	alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
+	alter control ACTION_ADDRESS_POPUP enable 'value ADDRESS_MODIFY
 	goto NCPR
 end if
 
@@ -323,10 +332,6 @@ else
 
 	'---- use direct link
 	onerror goto CrashedWhileConnectingToServer
-
-'	if ServerConnectionNumber = 0 then
-'		ServerConnectionNumber = SERVER_CONNECT("ODBC",ODBCConnectionString)
-'	end if
 
 	do case ServerConnectionNumber
 		case 0
@@ -398,7 +403,6 @@ do case TableInfo ( PropertyPFIQuery , TAB_INFO_NROWS )
 				where PROPERTY_PFI = ActionPropPFIValue and
 					  IS_PRIMARY = "Y"
 				into VicmapAddressQuery noselect
-			'if TableInfo ( VicmapAddressQuery , TAB_INFO_NROWS ) = 1 then
 			if TableInfo ( VicmapAddressQuery , TAB_INFO_NROWS ) > 0 then
 				exit for
 			else
@@ -409,12 +413,10 @@ do case TableInfo ( PropertyPFIQuery , TAB_INFO_NROWS )
 
 end case
 
-
 close table PropertyPFIQuery
 
 redim ActionVicmapAddressDetails ( 1 )
 call UpdateAddressArrayFromRecord ( ActionVicmapAddressDetails ( 1 ) , VicmapAddressQuery , 1 )
-'alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
 
 do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 
@@ -428,7 +430,7 @@ do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 			alter control ACTION_ADDRESS_POPUP enable value ADDRESS_MODIFY
 		else
 			IsPropNumVerified = FALSE
-			alter control ACTION_PROPNUM_EDITTEXT enable
+			'alter control ACTION_PROPNUM_EDITTEXT enable
 		end if
 
 	'--- found matching record in Rates table
@@ -436,7 +438,8 @@ do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 
 		IsPropNumVerified = TRUE
 
-		alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
+		'**** disabled, to eliminate the dodgy address summary that appeared in the Address EditText box
+		'alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
 
 		if TableInfo ( RatesAddressQuery , TAB_INFO_NROWS ) > 1 then
 			note "Common Ground has detected multiple addresses" + chr$(13) + "for this property number in " + RatesDataSource + "." + chr$(13) + chr$(13) + "Please ensure that displayed address is correct."
@@ -616,11 +619,13 @@ do case ActionPropNumPicklistValue
 		alter control ACTION_PROPNUM_EDITTEXT value VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPNUM disable
 		IsPropNumVerified = FALSE
 		ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
-		if ActionPropNumValue in ("","0") then
-			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" disable
-		else
-			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" enable
-		end if
+		'**** removed check for v12
+		' if ActionPropNumValue in ("","0") then
+			' alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" disable
+		' else
+			' alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" enable
+		' end if
+		alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verify" enable
 	case PROPNUM_MODIFY , PROPNUM_ADD
 		alter control ACTION_PROPNUM_EDITTEXT value "" enable active
 		IsPropNumVerified = FALSE
@@ -684,7 +689,9 @@ end case
 ActionPropNumPicklistValue =  ReadControlValue ( ACTION_PROPNUM_POPUP )
 ActionPropNumValue = ReadControlValue ( ACTION_PROPNUM_EDITTEXT )
 
-if ActionPropNumPicklistValue = PROPNUM_REMOVE or ActionPropNumValue = "NCPR" then
+'**** v12
+'if ActionPropNumPicklistValue = PROPNUM_REMOVE or ActionPropNumValue = "NCPR" then
+if ActionPropNumPicklistValue = PROPNUM_REMOVE then
 	alter control ACTION_ADDRESS_POPUP disable value ADDRESS_NO_ACTION
 end if
 
@@ -693,8 +700,10 @@ ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
 do case ActionAddressPicklistValue
 	case ADDRESS_NO_ACTION
 	case ADDRESS_MODIFY, ADDRESS_ADD
-		'alter control ACTION_ADDRESS_POPUP enable
-		if RatesAddressTable not in ("","?") then    '---- test for no rates link, eg, Stonnington demo
+		'**** v12 - allow a null property number, therefore we want to skip this bit because RatesAddressDetails ( 1 ) is meaningless
+		'**** A slight side effect here is that the RatesAddressDetails ( 1 ) value may already be populated if the user has previously hit Verify on another property number in the same edit
+		'if RatesAddressTable not in ("","?") then    '---- test for no rates link, eg, Stonnington demo
+		if ActionPropNumValue not in ( "" , "NCPR" ) and RatesAddressTable not in  ( "" , "?" ) then    '---- test for no rates link, eg, Stonnington demo
 			select * from RatesAddressTable where PROPNUM = ActionPropNumValue into RatesAddressQuery noselect
 			call UpdateAddressArrayFromRecord ( RatesAddressDetails ( 1 ) , RatesAddressQuery , 1 )
 		end if
@@ -703,10 +712,16 @@ do case ActionAddressPicklistValue
 		alter control ACTION_ADDRESS_EDITTEXT value ""
 end case
 
+'**** v12
+' if IsPropNumVerified and
+  ' ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum  and
+  ' ActionPropNumPicklistValue <> PROPNUM_REMOVE and
+  ' ActionPropNumValue <> "NCPR" then
+	' alter control ACTION_ADDRESS_POPUP enable
+' end if
 if IsPropNumVerified and
   ActionPropNumValue <> VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PropNum  and
-  ActionPropNumPicklistValue <> PROPNUM_REMOVE and
-  ActionPropNumValue <> "NCPR" then
+  ActionPropNumPicklistValue <> PROPNUM_REMOVE then
 	alter control ACTION_ADDRESS_POPUP enable
 end if
 
@@ -818,12 +833,6 @@ dim TempText as string
 if InputParcel () . SPI <> "" then
 	TempText = InputParcel () . SPI
 else
-'	TempText =
-'		left$ ( InputParcel () . PLAN_NUMBER + " " , 999 * int ( InputParcel () . PLAN_NUMBER <> "" )) +
-'		left$ ( "LOT " + InputParcel () . LOT_NUMBER + " " , 999 * int ( InputParcel () . LOT_NUMBER <> "" )) +
-'		left$ ( "PT " , 999 * int ( InputParcel () . PART = "P" )) +
-'		left$ ( "CA " + InputParcel () . ALLOTMENT + " " , 999 * int ( InputParcel () . ALLOTMENT <> "" )) +
-'		left$ ( "SEC " + InputParcel () . SECTION + " " , 999 * int ( InputParcel () . SECTION <> "" ))
 	TempText = "parcel description unknown"
 end if
 
@@ -917,9 +926,10 @@ else
 	
 	alter control ACTION_ADDRESS_POPUP value ADDRESS_NO_ACTION
 	ActionAddressPicklistValue = ReadControlValue ( ACTION_ADDRESS_POPUP )
-	if ubound ( ActionVicmapAddressDetails ) <> 0 then
-		alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
-	end if
+	'**** disabled, to eliminate the dodgy address summary that appeared in the Address EditText box
+	' if ubound ( ActionVicmapAddressDetails ) <> 0 then
+		' alter control ACTION_ADDRESS_EDITTEXT value AddressSummary ( ActionVicmapAddressDetails ( 1 ) )
+	' end if
 
 end if
 
@@ -948,7 +958,9 @@ end function
 function AddressSummary ( InputAddress () as AddressCaptureForm ) as string
 '================================================================================
 
-AddressSummary = ucase$ (
+dim TempAddress as string
+
+TempAddress = ucase$ (
 	ltrim$ ( rtrim$ (
 	left$ ( InputAddress () . SU_NO_1 , 999 * int ( InputAddress () . SU_NO_1 not in ( "" , "0" ) ) ) +
 	left$ ( "-" + InputAddress () . SU_NO_2 , 999 * int ( InputAddress () . SU_NO_2 not in ( "" , "0" ) ) ) +
@@ -965,6 +977,13 @@ AddressSummary = ucase$ (
 	rtrim$ ( " " + InputAddress () . STREET_TYPE ) +
 	rtrim$ ( " " + InputAddress () . STREET_SUFFIX ) +
 	left$ ( ", " + InputAddress () . LOCALITY , 999 * int ( InputAddress () . LOCALITY not in ( "" , "0" ) ) ) ) ) )
+
+'**** this part was introduced into the above expression, but MapInfo said that the expression was too complicated
+if InputAddress () . SU_HSA_UNIT_ID not in ( "" , "0" ) then
+	TempAddress = InputAddress () . SU_HSA_UNIT_ID + "/" + TempAddress
+end if
+	
+AddressSummary = TempAddress
 
 end function
 
@@ -992,6 +1011,7 @@ select
 			PARCEL_CREFNO,
 			PARCEL_SPI,
 			PARCEL_PART,
+			PARCEL_LGA_CODE,
 			PARCEL_PLAN_NUMBER,
 			PARCEL_LOT_NUMBER,
 			PARCEL_ALLOTMENT,
@@ -1020,6 +1040,7 @@ for i = 1 to NumParcels
 	VicmapParcelDetails ( i ) . CREFNO = ParcelQuery . PARCEL_CREFNO
 	VicmapParcelDetails ( i ) . SPI = ParcelQuery . PARCEL_SPI
 	VicmapParcelDetails ( i ) . PART = ParcelQuery . PARCEL_PART
+	VicmapParcelDetails ( i ) . LGA_CODE = ParcelQuery . PARCEL_LGA_CODE
 	VicmapParcelDetails ( i ) . PLAN_NUMBER = ParcelQuery . PARCEL_PLAN_NUMBER
 	VicmapParcelDetails ( i ) . LOT_NUMBER = ParcelQuery . PARCEL_LOT_NUMBER
 	VicmapParcelDetails ( i ) . ALLOTMENT = ParcelQuery . PARCEL_ALLOTMENT
@@ -1070,6 +1091,7 @@ do case BasePropEditMode
 	case TRUE
 		select
 					PROP_PFI,
+					PROP_LGA_CODE,
 					PROP_PROPNUM,
 					PROP_MULTI_ASSESSMENT,
 					PROP_STATUS,
@@ -1085,6 +1107,7 @@ do case BasePropEditMode
 	case FALSE
 		select
 					PROP_PFI,
+					PROP_LGA_CODE,
 					PROP_PROPNUM,
 					PROP_MULTI_ASSESSMENT,
 					PROP_STATUS,
@@ -1098,6 +1121,26 @@ do case BasePropEditMode
 					PropertyObject contains TempPointObject
 			order by PROP_PROPNUM_VAL
 			into	PropertyQuery noselect
+		'**** 11 Dec 2012: At Moreland, we identified a scenario where the property polygon doesn't contain the whole parcel polygon.
+		'**** If the user clicks somewhere within the parcel polygon but outside the property polygon, then the above query returns zero properties.
+		'**** If that's the case, run a similar query that doesn't restrict the results to only properties that contain the TempPointObject.
+		if TableInfo ( PropertyQuery , TAB_INFO_NROWS ) = 0 then
+			select
+						PROP_PFI,
+						PROP_LGA_CODE,
+						PROP_PROPNUM,
+						PROP_MULTI_ASSESSMENT,
+						PROP_STATUS,
+						PROP_PROPERTY_TYPE,
+						PROPV_FEATURE_TYPE,
+						val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
+				from	VicmapParcelPropertyTable , VicmapPropertyTable
+				where	ParcelPropertyParcelPFI = ParcelPFIValue and
+						ParcelPropertyPropertyPFI = PropertyPropertyPFI and
+						PropertyViewFeatureType not in ( "27723" , "27743" , "5723" , "5743" )
+				order by PROP_PROPNUM_VAL
+				into	PropertyQuery noselect
+		end if
 end case
 
 NumProperties = TableInfo ( PropertyQuery , TAB_INFO_NROWS )
@@ -1109,11 +1152,13 @@ fetch first from PropertyQuery
 for i = 1 to NumProperties
 
 	VicmapPropertyDetails ( i ) . PROPERTY_PFI = PropertyQuery . PROP_PFI
+	VicmapPropertyDetails ( i ) . LGA_CODE = PropertyQuery . PROP_LGA_CODE
 	VicmapPropertyDetails ( i ) . PROPNUM = PropertyQuery . PROP_PROPNUM
 	VicmapPropertyDetails ( i ) . MULTI_ASSESS = PropertyQuery . PROP_MULTI_ASSESSMENT
 	VicmapPropertyDetails ( i ) . STATUS = PropertyQuery . PROP_STATUS
 	VicmapPropertyDetails ( i ) . PROPERTY_TYPE = PropertyQuery . PROP_PROPERTY_TYPE
 	VicmapPropertyDetails ( i ) . VIEW_FEATURE_TYPE = PropertyQuery . PROPV_FEATURE_TYPE
+	VicmapPropertyDetails ( i ) . PrimaryAddress = AddressForProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
 	VicmapPropertyDetails ( i ) . NumParcels = NumParcelsInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
 	VicmapPropertyDetails ( i ) . NumPendingM1s = NumPendingM1sInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
 
@@ -1126,9 +1171,9 @@ for i = 1 to NumProperties
 		PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + " (base)"
 	end if
 
-	'if VicmapPropertyDetails ( i ) . STATUS = "P" then
-	'	PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + " (proposed)"
-	'end if
+	if VicmapPropertyDetails ( i ) . MULTI_ASSESS = "Y" and VicmapPropertyDetails ( i ) . PrimaryAddress <> "" then
+		PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + "  (" + left$ ( VicmapPropertyDetails ( i ) . PrimaryAddress , len ( VicmapPropertyDetails ( i ) . PrimaryAddress ) - 5 ) + ")"
+	end if
 
 	if i < NumProperties then fetch next from PropertyQuery end if
 
@@ -1179,18 +1224,15 @@ fetch first from AddressQuery
 
 for i = 1 to ubound ( VicmapAddressDetails )
 
+	if not FieldExists ( AddressQuery , "HSA_FLAG" ) then
+		note "Cannot continue. Please update your version of Vicmap Address"
+		end program
+	end if
+
 	VicmapAddressDetails ( i ) . PFI = AddressQuery . PFI
-
-	if FieldExists ( AddressQuery , "BLG_UNIT_TYPE" ) then
-		'**** New Format Vicmap Address
-		VicmapAddressDetails ( i ) . SU_TYPE = AddressQuery . BLG_UNIT_TYPE
-	end if
-	
-	if FieldExists ( AddressQuery , "PREMISES_TYPE" ) then
-		'**** Old Format Vicmap Address
-		VicmapAddressDetails ( i ) . SU_TYPE = AddressQuery . PREMISES_TYPE
-	end if
-
+	VicmapAddressDetails ( i ) . SU_TYPE = AddressQuery . BLG_UNIT_TYPE
+	VicmapAddressDetails ( i ) . SU_HSA_FLAG = AddressQuery . HSA_FLAG
+	VicmapAddressDetails ( i ) . SU_HSA_UNIT_ID = AddressQuery . HSA_UNIT_ID
 	VicmapAddressDetails ( i ) . SU_PREFIX_1 = AddressQuery . BLG_UNIT_PREFIX_1
 	VicmapAddressDetails ( i ) . SU_NO_1 = AddressQuery . BLG_UNIT_ID_1
 	VicmapAddressDetails ( i ) . SU_SUFF_1 = AddressQuery . BLG_UNIT_SUFFIX_1
@@ -1213,34 +1255,17 @@ for i = 1 to ubound ( VicmapAddressDetails )
 	VicmapAddressDetails ( i ) . HOUSE_PREFIX_2 = AddressQuery . HOUSE_PREFIX_2
 	VicmapAddressDetails ( i ) . HOUSE_NUMBER_2 = AddressQuery . HOUSE_NUMBER_2
 	VicmapAddressDetails ( i ) . HOUSE_SUFFIX_2 = AddressQuery . HOUSE_SUFFIX_2
-	VicmapAddressDetails ( i ) . DISPLAY_PREFIX_1 = AddressQuery . DISP_PREFIX_1
-	VicmapAddressDetails ( i ) . DISPLAY_NO_1 = AddressQuery . DISP_NUMBER_1
-	VicmapAddressDetails ( i ) . DISPLAY_SUFFIX_1 = AddressQuery . DISP_SUFFIX_1
-	VicmapAddressDetails ( i ) . DISPLAY_PREFIX_2 = AddressQuery . DISP_PREFIX_2
-	VicmapAddressDetails ( i ) . DISPLAY_NO_2 = AddressQuery . DISP_NUMBER_2
-	VicmapAddressDetails ( i ) . DISPLAY_SUFFIX_2 = AddressQuery . DISP_SUFFIX_2
-	VicmapAddressDetails ( i ) . POSTCODE = AddressQuery . POSTCODE
+	VicmapAddressDetails ( i ) . STREET_NAME = AddressQuery . ROAD_NAME
+	VicmapAddressDetails ( i ) . STREET_TYPE = AddressQuery . ROAD_TYPE
+	VicmapAddressDetails ( i ) . STREET_SUFFIX = AddressQuery . ROAD_SUFFIX
 	VicmapAddressDetails ( i ) . DIST_RELATED_FLAG = AddressQuery . DISTANCE_RELATED_FLAG
 	VicmapAddressDetails ( i ) . PRIMARY = AddressQuery . IS_PRIMARY
 	VicmapAddressDetails ( i ) . EASTING = CentroidX ( AddressQuery . obj )
 	VicmapAddressDetails ( i ) . NORTHING = CentroidY ( AddressQuery . obj )
 	VicmapAddressDetails ( i ) . DATUM_PROJ = TableInfo ( AddressQuery , TAB_INFO_COORDSYS_NAME )
 	VicmapAddressDetails ( i ) . OUTSIDE_PROPERTY = AddressQuery . OUTSIDE_PROPERTY
-
-	if FieldExists ( AddressQuery , "ROAD_NAME" ) then
-		'**** New Format Vicmap Address
-		VicmapAddressDetails ( i ) . STREET_NAME = AddressQuery . ROAD_NAME
-		VicmapAddressDetails ( i ) . STREET_TYPE = AddressQuery . ROAD_TYPE
-		VicmapAddressDetails ( i ) . STREET_SUFFIX = AddressQuery . ROAD_SUFFIX
-	else
-		'**** Old Format Vicmap Address
-		VicmapAddressDetails ( i ) . STREET_NAME = AddressQuery . STREET_NAME
-		VicmapAddressDetails ( i ) . STREET_TYPE = AddressQuery . STREET_TYPE
-		VicmapAddressDetails ( i ) . STREET_SUFFIX = AddressQuery . STREET_SUFFIX
-	end if
-
 	VicmapAddressDetails ( i ) . LOCALITY = AddressQuery . LOCALITY_NAME
-	VicmapAddressDetails ( i ) . POSTCODE = AddressQuery . POSTCODE
+	VicmapAddressDetails ( i ) . LGA_CODE = AddressQuery . LGA_CODE
 
 	AddressDescPicklistArray ( i ) = AddressSummary ( VicmapAddressDetails ( i ) )
 
@@ -1284,6 +1309,24 @@ end function
 
 
 '================================================================================
+function AddressForProperty ( byval PropertyPFIValue as string ) as string
+'================================================================================
+select *
+	from	VicmapAddressTable
+	where	PROPERTY_PFI = PropertyPFIValue and IS_PRIMARY = "Y"
+	into 	AddressQuery noselect
+if TableInfo ( AddressQuery , TAB_INFO_NROWS ) >= 1 then
+	fetch rec 1 from AddressQuery
+	AddressForProperty = AddressQuery . EZI_ADDRESS
+else
+	AddressForProperty = ""
+end if
+close table AddressQuery
+end function
+
+
+
+'================================================================================
 function NumPendingM1sInProperty ( byval PropertyPFIValue as string ) as integer
 '================================================================================
 select *
@@ -1293,6 +1336,23 @@ select *
 	into NumPendingM1sQuery noselect
 NumPendingM1sInProperty = TableInfo ( NumPendingM1sQuery , TAB_INFO_NROWS )
 close table NumPendingM1sQuery
+end function
+
+
+
+'================================================================================
+function DoesRoadExistInVicmapAddress ( byval RoadNameValue as string , byval RoadTypeValue as string , byval RoadSuffixValue as string ) as logical
+'================================================================================
+select *
+	from	VicmapAddressTable
+	where	ROAD_NAME = RoadNameValue and ROAD_TYPE = RoadTypeValue and ROAD_SUFFIX = RoadSuffixValue
+	into 	AddressQuery noselect
+if TableInfo ( AddressQuery , TAB_INFO_NROWS ) >= 1 then
+	DoesRoadExistInVicmapAddress = TRUE
+else
+	DoesRoadExistInVicmapAddress = FALSE
+end if
+close table AddressQuery
 end function
 
 
