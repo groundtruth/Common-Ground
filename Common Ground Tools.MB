@@ -1155,17 +1155,17 @@ if FileExists("C:\Program Files\Microsoft Office\Office18\EXCEL.EXE") then Sprea
 if FileExists("C:\Program Files\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office19\EXCEL.EXE" end if
 if FileExists("C:\Program Files\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office20\EXCEL.EXE" end if
 
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office10\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office10\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office11\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office11\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office12\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office12\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office13\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office13\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office14\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office15\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office15\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office16\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office16\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office17\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office17\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office18\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office18\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office19\EXCEL.EXE" end if
-if FileExists("C:\Program Files (x86)\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files\Microsoft Office\Office20\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office10\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office10\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office11\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office11\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office12\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office12\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office13\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office13\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office15\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office15\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office16\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office16\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office17\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office17\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office18\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office18\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office19\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office19\EXCEL.EXE" end if
+if FileExists("C:\Program Files (x86)\Microsoft Office\Office20\EXCEL.EXE") then SpreadsheetAppPath = "C:\Program Files (x86)\Microsoft Office\Office20\EXCEL.EXE" end if
 
 end function
 
@@ -1395,13 +1395,14 @@ call LogEvent ( "  Creating index..." )
 create index on TableName (FieldName)
 call LogEvent ( "  Index created successfully." )
 
-'---- pause for a second because errors sometimes occur when attempting to index a field that has just been indexed
-'---- except MapInfo 9.02 where the pause actually crashes the program
-if SystemInfo ( SYS_INFO_MIVERSION ) < 900 then
-	call LogEvent ( "  Initiating pause..." )
-	call Pause ( 1 )
-	call LogEvent ( "  Pause complete." )
-end if
+'---- disabling pause function due to error reported by Glen Eira where the pause is initiated but never completed
+''---- pause for a second because errors sometimes occur when attempting to index a field that has just been indexed
+''---- except MapInfo 9.02 where the pause actually crashes the program
+'if SystemInfo ( SYS_INFO_MIVERSION ) < 900 then
+'	call LogEvent ( "  Initiating pause..." )
+'	call Pause ( 1 )
+'	call LogEvent ( "  Pause complete." )
+'end if
 
 exit sub
 

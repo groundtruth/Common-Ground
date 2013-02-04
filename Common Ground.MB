@@ -1,6 +1,6 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2013.01.07a"
+define BuildNum				"2013.02.05a"
 define ApplicationDesc		"Property Data Maintenance System"
 define CopyrightNotice		"Copyright © 2005-2013 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
@@ -1144,6 +1144,9 @@ dim UpdateStatus as logical
 dim SpreadsheetFormat as smallint
 dim ViewSpreadsheet as logical
 
+dim M1DialogWidth as integer
+M1DialogWidth = 240
+
 ' populate M1Table variable for if 'OpenTables' sub has not yet been run
 open table M1TablePath
 M1Table = TableInfo ( 0 , 1 )
@@ -1173,11 +1176,11 @@ end if
 
 dialog
 	title "Generate M1"
-	width 240
+	width M1DialogWidth
 	calling GenerateM1DialogLaunchHandler
 	control GroupBox
 		position 10, 10
-		width 220 height 60
+		width M1DialogWidth - 20 height 60
 		title "Include Edits Made By"
 	control RadioGroup
 		id USER_FILTER_RADIO
@@ -1202,7 +1205,7 @@ dialog
 '		into SpreadsheetFormat
 	control GroupBox
 		position 10, 125 - 50
-		width 220 height 65
+		width M1DialogWidth - 20 height 65
 		title "Spreadsheet File"
 	control StaticText
 		position 20, 140 - 50
