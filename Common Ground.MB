@@ -1,6 +1,6 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2013.02.05a"
+define BuildNum				"2013.02.05c"
 define ApplicationDesc		"Property Data Maintenance System"
 define CopyrightNotice		"Copyright © 2005-2013 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
@@ -1145,7 +1145,7 @@ dim SpreadsheetFormat as smallint
 dim ViewSpreadsheet as logical
 
 dim M1DialogWidth as integer
-M1DialogWidth = 240
+M1DialogWidth = 260
 
 ' populate M1Table variable for if 'OpenTables' sub has not yet been run
 open table M1TablePath
@@ -1219,7 +1219,7 @@ dialog
 	control EditText
 		id SPREADSHEET_NAME_EDITTEXT
 		position 50, 155 - 50
-		width 170
+		width 190
 		value M1SpreadsheetName
 		into M1SpreadsheetName
 	control CheckBox
