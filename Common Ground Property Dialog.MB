@@ -356,12 +356,22 @@ else
 		file TempFileName$("")
 	RatesAddressTable = TableInfo ( 0 , 1 )
 
+	'2013-05-23 troubleshooting at Ararat
+	if LGACode in ( "301" ) then
+		browse * from RatesAddressTable
+	end if
+
 end if
 
 select *
 	from RatesAddressTable
 	where PROPNUM = ActionPropNumValue
 	into RatesAddressQuery noselect
+
+	'2013-05-23 troubleshooting at Ararat
+	if LGACode in ( "301" ) then
+		browse * from RatesAddressQuery
+	end if
 
 '----------------------------------------------------------
 ' new 23-Oct-2006 (Bendigo)
@@ -423,7 +433,7 @@ do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 	'---- found no matching record in Rates table
 	case 0
 
-		if Ask ( "Could not find this property number" + chr$(13) + "in " + RatesDataSource + "." + chr$(13) + chr$(13) + "Do you still wish to use this number?", "Yes" , "No" ) then
+		if Ask ( "Could not find property number '" + ActionPropNumValue + "'" + chr$(13) + "in " + RatesDataSource + "." + chr$(13) + chr$(13) + "Do you still wish to use this number?", "Yes" , "No" ) then
 			IsPropNumVerified = TRUE
 			alter control ACTION_PROPNUM_EDITTEXT disable
 			alter control ACTION_PROPNUM_VERIFY_BUTTON title "Verified" disable
@@ -460,9 +470,12 @@ do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 
 		end if
 
+		close table RatesAddressQuery
+
 end case
 
-close table RatesAddressQuery
+' 2013-05-23 - temporarily moved this close table statement to just inside the preceding case statement - I want to keep the RatesAddressQuery table open for troubleshooting at Ararat to identify why the property number is not being found
+'close table RatesAddressQuery
 close table VicmapAddressQuery
 
 NCPR:
