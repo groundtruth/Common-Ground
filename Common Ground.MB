@@ -470,6 +470,12 @@ if not FileExists ( VicmapParcelPropertyTablePath ) then note "Vicmap Parcel-Pro
 '---- this command moved below to cater for sites that use a 'formatted' folder
 'if not FileExists ( VicmapAddressTablePath ) then note "Vicmap Address table path specified in INI file does not exist." call Exit end if
 
+'**** For Glen Eira, prevent the ProgressBars showing, because Rob has complained that if he swaps to another application, the update process stops
+'**** This is a major issue for Glen Eira because the update takes up to half an hour for some reason
+if LGACode in ( "322" ) then
+	set ProgressBars off
+end if
+
 if not TablesOpened then
 
 	'---- for councils who have a separate folder for 'formatted' Vicmap Address, ensure that it is updated from the source folder
@@ -647,6 +653,9 @@ if UserHasWritePermissionToDataFolder then
 end if
 
 TablesOpened = TRUE
+
+'**** re-enable ProgressBars, because they've been turned off for Glen Eira
+set ProgressBars on
 
 end sub
 
