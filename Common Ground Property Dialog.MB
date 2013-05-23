@@ -356,22 +356,12 @@ else
 		file TempFileName$("")
 	RatesAddressTable = TableInfo ( 0 , 1 )
 
-	'2013-05-23 troubleshooting at Ararat
-	if LGACode in ( "301" ) then
-		browse * from RatesAddressTable
-	end if
-
 end if
 
 select *
 	from RatesAddressTable
 	where PROPNUM = ActionPropNumValue
 	into RatesAddressQuery noselect
-
-	'2013-05-23 troubleshooting at Ararat
-	if LGACode in ( "301" ) then
-		browse * from RatesAddressQuery
-	end if
 
 '----------------------------------------------------------
 ' new 23-Oct-2006 (Bendigo)
@@ -470,12 +460,9 @@ do case TableInfo ( RatesAddressQuery , TAB_INFO_NROWS )
 
 		end if
 
-		close table RatesAddressQuery
-
 end case
 
-' 2013-05-23 - temporarily moved this close table statement to just inside the preceding case statement - I want to keep the RatesAddressQuery table open for troubleshooting at Ararat to identify why the property number is not being found
-'close table RatesAddressQuery
+close table RatesAddressQuery
 close table VicmapAddressQuery
 
 NCPR:
@@ -1367,7 +1354,3 @@ else
 end if
 close table AddressQuery
 end function
-
-
-
-
