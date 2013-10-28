@@ -4,7 +4,7 @@ Common Ground is a MapInfo plugin (MBX) that enables Victorian councils to updat
 
 *Note: Common Ground is considered a semi-manual method of filling in M1s. For a more automated solution, see Groundtruth's Pozi Connect for M1s.*
 
-## Intallation
+## Installation
 
 The Common Ground.mbx and associated files typically reside on a network drive where it is accessible to multiple users.
 
@@ -35,3 +35,21 @@ Ground MBX file on the network.
 Check the 'Autoload' tickbox for Common Ground to ensure it loads up whenever MapInfo starts.
 
 ![MapInfo Pro Tool Manager Autoload](images/mipro_tool_manager_autoload.jpg)
+
+## Change Settings
+
+Common Ground maintains its settings in a configuration file (Common Ground.ini) in the same folder as the application (Common Ground.mbx) file.
+
+With any changes you make in the configuration, you will need to restart MapInfo after you update the INI file for change to take effect.
+
+### Change M1 Output Location
+
+Update the `OutputFolder` setting in the INI file. The folder name will need to maintain the trailing slash.
+
+## DSN
+
+When running a 64 bit version of Windows, you need to set up your DSN as 32 bit so that MapInfo Professional can recognise it. (The standard control panel will only let you set up 64 bit DSNs.)
+
+To set up a 32 bit DSN, bring up Run dialog using Windows Key + R, then paste in: `c:\windows\sysWOW64\odbcad32.exe`.
+
+This enables you to set up the DSN as 32 bit, and MapInfo (and therefore Common Ground) will be able to recognise it.
