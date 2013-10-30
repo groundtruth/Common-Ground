@@ -580,7 +580,7 @@ if VicmapAddressDetails ( TargetAddressPicklistValue ) . PRIMARY =  "N" and Ubou
 end if
 
 '---- disable Extent action for base properties
-if VicmapPropertyDetails ( TargetPropertyPicklistValue ) . VIEW_FEATURE_TYPE in ( "27723" , "27743" , "5723" , "5743" ) then
+if VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_TYPE = "G" then
 	alter control TARGET_EXTENT_POPUP value EXTENT_WHOLE_PROPERTY disable
 end if
 
@@ -1083,7 +1083,7 @@ ParcelPropertyParcelPFI = VicmapParcelPropertyTable + ".PARCEL_PFI"
 ParcelPropertyPropertyPFI = VicmapParcelPropertyTable + ".PROPERTY_PFI"
 PropertyPropertyPFI = VicmapPropertyTable + ".PROP_PFI"
 PropertyStatus = VicmapPropertyTable + ".PROP_STATUS"
-PropertyViewFeatureType = VicmapPropertyTable + ".PROPV_FEATURE_TYPE"
+PropertyViewFeatureType = VicmapPropertyTable + ".PROP_PROPERTY_TYPE"
 PropertyObject = VicmapPropertyTable + ".obj"
 TempPointObject = TempPoint + ".obj"
 
@@ -1096,7 +1096,6 @@ do case BasePropEditMode
 					PROP_MULTI_ASSESSMENT,
 					PROP_STATUS,
 					PROP_PROPERTY_TYPE,
-					PROPV_FEATURE_TYPE,
 					val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
 			from	VicmapParcelPropertyTable , VicmapPropertyTable, TempPoint
 			where	ParcelPropertyParcelPFI = ParcelPFIValue and
@@ -1112,12 +1111,11 @@ do case BasePropEditMode
 					PROP_MULTI_ASSESSMENT,
 					PROP_STATUS,
 					PROP_PROPERTY_TYPE,
-					PROPV_FEATURE_TYPE,
 					val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
 			from	VicmapParcelPropertyTable , VicmapPropertyTable, TempPoint
 			where	ParcelPropertyParcelPFI = ParcelPFIValue and
 					ParcelPropertyPropertyPFI = PropertyPropertyPFI and
-					PropertyViewFeatureType not in ( "27723" , "27743" , "5723" , "5743" ) and 
+					PropertyViewFeatureType = "O" and 
 					PropertyObject contains TempPointObject
 			order by PROP_PROPNUM_VAL
 			into	PropertyQuery noselect
@@ -1132,12 +1130,11 @@ do case BasePropEditMode
 						PROP_MULTI_ASSESSMENT,
 						PROP_STATUS,
 						PROP_PROPERTY_TYPE,
-						PROPV_FEATURE_TYPE,
 						val(PROP_PROPNUM) "PROP_PROPNUM_VAL"
 				from	VicmapParcelPropertyTable , VicmapPropertyTable
 				where	ParcelPropertyParcelPFI = ParcelPFIValue and
 						ParcelPropertyPropertyPFI = PropertyPropertyPFI and
-						PropertyViewFeatureType not in ( "27723" , "27743" , "5723" , "5743" )
+						PropertyViewFeatureType = "O"
 				order by PROP_PROPNUM_VAL
 				into	PropertyQuery noselect
 		end if
@@ -1157,7 +1154,6 @@ for i = 1 to NumProperties
 	VicmapPropertyDetails ( i ) . MULTI_ASSESS = PropertyQuery . PROP_MULTI_ASSESSMENT
 	VicmapPropertyDetails ( i ) . STATUS = PropertyQuery . PROP_STATUS
 	VicmapPropertyDetails ( i ) . PROPERTY_TYPE = PropertyQuery . PROP_PROPERTY_TYPE
-	VicmapPropertyDetails ( i ) . VIEW_FEATURE_TYPE = PropertyQuery . PROPV_FEATURE_TYPE
 	VicmapPropertyDetails ( i ) . PrimaryAddress = AddressForProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
 	VicmapPropertyDetails ( i ) . NumParcels = NumParcelsInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
 	VicmapPropertyDetails ( i ) . NumPendingM1s = NumPendingM1sInProperty ( VicmapPropertyDetails ( i ) . PROPERTY_PFI )
@@ -1167,7 +1163,7 @@ for i = 1 to NumProperties
 		case else	PropDescPicklistArray ( i ) = VicmapPropertyDetails ( i ) . PROPNUM
 	end case
 
-	if VicmapPropertyDetails ( i ) . VIEW_FEATURE_TYPE in ( "27723" , "27743" , "5723" , "5743" ) then
+	if VicmapPropertyDetails ( i ) . PROPERTY_TYPE = "G" then
 		PropDescPicklistArray ( i ) = PropDescPicklistArray ( i ) + " (base)"
 	end if
 

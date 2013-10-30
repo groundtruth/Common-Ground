@@ -20,8 +20,7 @@ do case BasePropEditMode
 			from VicmapPropertyTable
 			where PROP_PROPNUM = "" and
 				PROP_PROPERTY_TYPE = "O" and
-				PROP_LGA_CODE = LGACode and
-				PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+				PROP_LGA_CODE = LGACode
 			order by PROP_PFI_CREATED desc
 			into Property_NoPropNum noselect
 end case
@@ -66,8 +65,7 @@ do case BasePropEditMode
 			where
 				PROP_PFI in ( select PROPERTY_PFI from Property_NonCrown_List ) and
 				PROP_PROPNUM = "" and
-				PROP_PROPERTY_TYPE = "O" and
-				PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+				PROP_PROPERTY_TYPE = "O"
 			order by PROP_PFI_CREATED desc
 			into Property_NoPropNumNonCrown noselect
 end case
@@ -811,7 +809,6 @@ if IncludeCrownLand then
 			PROP_PROPNUM,
 			PROP_PFI,
 			PROP_STATUS,
-			PROPV_FEATURE_TYPE,
 			PARCEL_PFI,
 			PARCEL_CROWN_STATUS
 		from
@@ -823,7 +820,7 @@ if IncludeCrownLand then
 			PROP_PFI = PROPERTY_PFI and 
 			ParcelPropertyParcelPFI = ParcelPFI and
 			PROP_STATUS = "A" and
-			PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" )
+			PROP_PROPERTY_TYPE = "O"
 		group by PROP_PFI
 		into PROPERTY_MP_temp noselect
 else
@@ -831,7 +828,6 @@ else
 			PROP_PROPNUM,
 			PROP_PFI,
 			PROP_STATUS,
-			PROPV_FEATURE_TYPE,
 			PARCEL_PFI,
 			PARCEL_CROWN_STATUS
 		from
@@ -843,7 +839,7 @@ else
 			PROP_PFI = PROPERTY_PFI and 
 			ParcelPropertyParcelPFI = ParcelPFI and
 			PROP_STATUS = "A" and
-			PROPV_FEATURE_TYPE not in ( "27723" , "27743" , "5723" , "5743" ) and
+			PROP_PROPERTY_TYPE = "O" and
 			Parcel_Crown_Status = ""
 		group by PROP_PFI
 		into PROPERTY_MP_temp noselect

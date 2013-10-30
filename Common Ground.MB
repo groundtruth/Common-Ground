@@ -1,6 +1,6 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2013.05.24a"
+define BuildNum				"2013.10.30a"
 define ApplicationDesc		"Property Data Maintenance System"
 define CopyrightNotice		"Copyright © 2005-2013 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
@@ -645,7 +645,6 @@ if UserHasWritePermissionToDataFolder then
 	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_PROPERTY_TYPE" )
 	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_MULTI_ASSESSMENT" )
 	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROP_STATUS" )
-	call EnsureFieldIsIndexed ( VicmapPropertyTable , "PROPV_FEATURE_TYPE" )
 	
 	call EnsureFieldIsIndexed ( VicmapParcelPropertyTable , "PARCEL_PFI" )
 	call EnsureFieldIsIndexed ( VicmapParcelPropertyTable , "PROPERTY_PFI" )
