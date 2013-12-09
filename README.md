@@ -48,8 +48,14 @@ Update the `OutputFolder` setting in the INI file. The folder name will need to 
 
 ## DSN
 
+### Running in Windows 64 bit
+
 When running a 64 bit version of Windows, you need to set up your DSN as 32 bit so that MapInfo Professional can recognise it. (The standard control panel will only let you set up 64 bit DSNs.)
 
 To set up a 32 bit DSN, bring up Run dialog using Windows Key + R, then paste in: `c:\windows\sysWOW64\odbcad32.exe`.
 
 This enables you to set up the DSN as 32 bit, and MapInfo (and therefore Common Ground) will be able to recognise it.
+
+### Troubleshooting
+
+If you experience an error like `DBMSS Table or View ... not found in Database. No columns in table ...`, check your DSN, and ensure that your property database is the *default* database.
