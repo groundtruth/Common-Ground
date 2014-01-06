@@ -48,6 +48,24 @@ Update the `OutputFolder` setting in the INI file. The folder name will need to 
 
 ## DSN
 
+The user's PC will need to have a DSN (Data Source Name)that enables it to connect to the council's property and rating system.
+
+This is configured using the Windows Control Panel:
+
+    Control Panel >
+        Administrator Tools >
+            ODBC Data Sources >
+                System DSN
+
+Obtain the settings from your IT administrator.
+
+The name given to the DSN needs to exactly match the `ODBCConnectionString` setting in the Common Ground INI file.
+
+For example, if the DSN for the property system is 'pthprod', then the INI file setting will look something like this:
+
+    ODBCConnectionString = DSN=pthprod;UID=pthprod;PWD=...
+
+
 ### Running in Windows 64 bit
 
 When running a 64 bit version of Windows, you need to set up your DSN as 32 bit so that MapInfo Professional can recognise it. (The standard control panel will only let you set up 64 bit DSNs.)
