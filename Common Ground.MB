@@ -1,8 +1,8 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2013.10.30a"
+define BuildNum				"2014.12.03a"
 define ApplicationDesc		"Property Data Maintenance System"
-define CopyrightNotice		"Copyright © 2005-2013 Groundtruth"
+define CopyrightNotice		"Copyright © 2005-2014 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
 '=================================================================================
 
@@ -979,7 +979,7 @@ update M1CurrentRecord set EDIT_CODE = CurrentEditCode
 '---- PROPERTY_PFI
 'if CurrentEditCode in ( "E" , "P" , "S" , "T" , "Z" ) or
 '		CurrentEditCode in ( "A" , "R" ) and TargetExtentPicklistValue <> EXTENT_THIS_PARCEL then
-if TargetExtentPicklistValue = EXTENT_WHOLE_PROPERTY and CurrentEditCode <> "C" then
+if ( TargetExtentPicklistValue = EXTENT_WHOLE_PROPERTY and CurrentEditCode <> "C" ) or CurrentEditCode = "R" then
 	update M1CurrentRecord set PROPERTY_PFI = VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI
 end if
 
