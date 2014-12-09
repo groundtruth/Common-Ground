@@ -544,6 +544,11 @@ PropertyTarget:
 
 TargetPropertyPicklistValue = ReadControlValue ( TARGET_PROPNUM_POPUP )
 
+if ubound ( VicmapPropertyDetails ) = 0 then
+	note "Vicmap is missing critical property information for this parcel." + chr$(10) + "Unable to continue with this edit."
+	exit sub
+end if
+
 call PopulateVicmapAddressDetails ( VicmapPropertyDetails ( TargetPropertyPicklistValue ) . PROPERTY_PFI )
 alter control TARGET_ADDRESS_POPUP title from variable AddressDescPicklistArray
 

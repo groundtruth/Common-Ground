@@ -1,6 +1,6 @@
 ' '=================================================================================
 define ApplicationName		"Common Ground"
-define BuildNum				"2014.12.03a"
+define BuildNum				"2014.12.09a"
 define ApplicationDesc		"Property Data Maintenance System"
 define CopyrightNotice		"Copyright © 2005-2014 Groundtruth"
 define ApplicationWebsite	"www.groundtruth.com.au"
