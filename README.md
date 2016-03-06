@@ -2,7 +2,7 @@
 
 Common Ground is a MapInfo plugin (MBX) that enables Victorian councils to update, correct and track changes to their property map base. Specifically, it provides a graphical interface to guide council staff in compiling the required information to complete the 'M1' spreadsheet for submitting to the state government.
 
-*Note: Common Ground is considered a semi-manual method of filling in M1s. For a more automated solution, see Groundtruth's Pozi Connect for M1s.*
+*Note: Common Ground is considered a semi-manual method of filling in M1s. For a more automated solution, see Groundtruth's [Pozi Connect for M1s](http://www.groundtruth.com.au/pozi-connect-for-m1s).*
 
 ## Installation
 
